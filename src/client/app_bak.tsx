@@ -71,8 +71,6 @@ export default function Chat() {
         agent,
         maxSteps: 5,
     });
-    
-    // console.log("Agent messages:", agentMessages);
 
     // Scroll to bottom when messages change
     useEffect(() => {

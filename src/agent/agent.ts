@@ -12,12 +12,27 @@ import { createOpenAI } from "@ai-sdk/openai";
 
 import type { Env } from "../shared/env";
 import { agentContext, processToolCalls } from "./agent-utils";
-import { tools, executions } from "../tools/basics";
+import { tools, executions } from "../tools";
+import { logger } from "../utils";
+import { log } from "console";
+import type { Connection, ConnectionContext, WSMessage } from "partyserver";
 
 /**
  * Main Chat Agent class. Extends AIChatAgent from Cloudflare's agentic SDK.
  */
 export class Chat extends AIChatAgent<Env> {
+    async onStart() {
+        logger.debug("Chat agent started");
+    }
+    
+    async onConnect(connection: Connection, ctx: ConnectionContext) {
+        logger.debug("Chat agent connected", { connection });
+        // Check the request at ctx.request
+        // Authenticate the client
+        // Give them the OK.
+        connection.accept();
+    }
+  
     /**
      * Called when a chat message arrives from the user.
      * It returns a streaming response (text + possible tool calls).
@@ -68,6 +83,10 @@ export class Chat extends AIChatAgent<Env> {
      * We simply add a new user message to the conversation logs.
      */
     async executeTask(description: string, task: Schedule<string>) {
+        logger.debug("executeTask", {
+            description,
+            task,
+        });
         await this.saveMessages([
             ...this.messages,
             {
