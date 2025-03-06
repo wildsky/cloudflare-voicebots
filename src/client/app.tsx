@@ -2,7 +2,7 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useAgent } from "agents-sdk/react";
 import { useAgentChat } from "agents-sdk/ai-react";
 import type { Message } from "@ai-sdk/react";
-import { APPROVAL } from "../shared";
+import { APPROVAL } from "../shared/approval";
 import type { tools } from "../tools/basics";
 import { Button } from "./components/ui/button";
 import { Card } from "./components/ui/card";
