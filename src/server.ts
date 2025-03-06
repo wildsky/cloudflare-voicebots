@@ -15,7 +15,7 @@ import {
 } from "ai";
 import { createOpenAI } from "@ai-sdk/openai";
 import { processToolCalls } from "./utils";
-import { tools, executions } from "./tools";
+import { tools, executions } from "./tools/basics";
 import { AsyncLocalStorage } from "node:async_hooks";
 
 // Environment variables type definition

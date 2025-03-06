@@ -5,7 +5,7 @@
 import { tool } from "ai";
 import { z } from "zod";
 
-import { agentContext } from "./server";
+import { agentContext } from "../server";
 
 /**
  * Weather information tool that requires human confirmation
