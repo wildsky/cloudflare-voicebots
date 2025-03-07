@@ -35,6 +35,8 @@ export class VoiceAgent extends AIChatAgent<Env> {
     private stt?: SpeechToTextService;
     private tts?: TextToSpeechService;
     private transcriptAccumulator: TextUIPart[] = [];
+    private currentAbortController?: AbortController;
+
 
     async onStart() {
         logger.debug("VoiceAgent agent started");
@@ -128,6 +130,7 @@ export class VoiceAgent extends AIChatAgent<Env> {
             const isEndOfSentence = full_sentence_delimiters.includes(chunk.textDelta[chunk.textDelta.length - 1]);
             const isEndOfParagraph = sentence_fragment_delimiters.includes(chunk.textDelta[chunk.textDelta.length - 1]);
             const flush = isEndOfSentence || isEndOfParagraph;
+            // If there are special characters, we need to remove them
             logger.debug("Sending text delta to TTS service", { chunk, flush });
             this.tts?.sendText(chunk.textDelta, flush);
         } else if (chunk.type == "finish") {
@@ -164,31 +167,37 @@ export class VoiceAgent extends AIChatAgent<Env> {
                         tools,
                         executions,
                     });
-                    // 2. Create an OpenAI client
-                    const openai = createOpenAI({
-                        apiKey: this.env.OPENAI_API_KEY,
-                    });
 
-                    // const abortSignal = new AbortController().signal;
+                    // 2) Abort any existing generation if it's still running
+                    if (this.currentAbortController) {
+                        this.currentAbortController.abort();
+                        // Also halt the TTS service
+                        // this.tts?.halt();
+                    }
 
-                    // 3. Stream AI response (GPT-4 or whichever model you pick)
-                    //    Merges tool usage instructions if user or AI requested them.
+                    // 3) Create a fresh AbortController
+                    this.currentAbortController = new AbortController();
+
+                    // 4) Create OpenAI client
+                    const openai = createOpenAI({ apiKey: this.env.OPENAI_API_KEY });
+
+                    // 5) Stream the AI response, passing abortSignal from our controller
                     const result = streamText({
                         model: openai("gpt-4o-2024-11-20"),
                         system: `
-              You are a helpful assistant that can do various tasks. If the user asks,
-              you can schedule tasks to be executed later. The input may include a date/time/cron pattern
-              to be passed to a scheduling tool. The time is now: ${new Date().toISOString()}.
-            `,
+                            You are a helpful assistant that can do various tasks. If the user asks,
+                            you can schedule tasks to be executed later. The input may include a date/time/cron pattern
+                            to be passed to a scheduling tool. The time is now: ${new Date().toISOString()}.
+                            `,
                         messages: processedMessages,
                         tools,
                         onFinish,
                         onChunk: this.onNewGeneratedChunk.bind(this),
                         maxSteps: 10,
-                        // abortSignal: abortSignal,
+                        abortSignal: this.currentAbortController.signal, // <-- important
                     });
 
-                    // Merge the AI’s text stream into the dataStream (so the client sees the text in real-time).
+                    // 6) Merge text stream into dataStream (for normal chat UI)
                     result.mergeIntoDataStream(dataStream);
                 },
             });
