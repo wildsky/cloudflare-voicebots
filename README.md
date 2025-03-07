@@ -1,6 +1,6 @@
 # 🤖 Voice Chat Agent Starter Kit
 
-![agents-header](https://github.com/user-attachments/assets/f6d99eeb-1803-4495-9c5e-3cf07a37b402)
+![agents-header](./public/banner.jpeg)
 
 A starter template for building AI-powered voice chat agents using Cloudflare's Agent platform, powered by [`agents-sdk`](https://www.npmjs.com/package/agents-sdk). This project provides a foundation for creating interactive, voice-enabled chat experiences with AI, complete with a modern 16:9 UI, conversation sidebar, tool integration, and built-in support for local microphone (STT) and speaker (TTS) interfaces.
 
