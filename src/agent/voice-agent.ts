@@ -25,6 +25,7 @@ import type { TextUIPart } from "@ai-sdk/ui-utils";
 import type { TextToSpeechService } from "@/services/tts/tts";
 import { ElevenLabsTTS } from "@/services/tts/elevenlabs";
 import { LmntTTS } from "@/services/tts/lmnt";
+import { createWriteStream } from "fs";
 
 const sentence_fragment_delimiters: string = ".?!;:,\n…)]}。-";
 const full_sentence_delimiters: string = ".?!\n…。";
@@ -56,8 +57,6 @@ export class VoiceAgent extends AIChatAgent<Env> {
             optimizeLatency: 4
         });
         this.tts.onAudio((audioChunk) => {
-            logger.debug("Received audio chunk from TTS service", { audioChunk });
-
             // For TTS, we want to forward 'audioChunk' back to the client
             if (this.connection) {
                 this.connection.send(audioChunk);

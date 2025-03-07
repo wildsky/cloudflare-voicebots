@@ -10,7 +10,7 @@ import { Input } from "./components/ui/input";
 import { Avatar, AvatarFallback } from "./components/ui/avatar";
 import { Switch } from "./components/ui/switch";
 import { Send, Bot, Trash2, Sun, Moon, Bug, Mic, MicOff } from "lucide-react";
-import type { LocalSpeaker } from "@/services/ sinks/local_speaker";
+import { LocalSpeakerSink } from "@/services/ sinks/local_speaker";
 
 // List of tools that require human confirmation
 const toolsRequiringConfirmation: (keyof typeof tools)[] = [
@@ -29,7 +29,8 @@ export default function Chat() {
     const [micActive, setMicActive] = useState(false);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
-    const speakerRef = useRef<LocalSpeaker | null>(null);
+    // const speakerRef = useRef<LocalSpeaker | null>(null);
+    const sinkRef = useRef<LocalSpeakerSink | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -60,16 +61,78 @@ export default function Chat() {
         setTheme(newTheme);
     };
 
+    const audioContextRef = useRef<AudioContext | null>(null);
+    const [audioQueue, setAudioQueue] = useState<Array<ArrayBuffer>>([]);
+    const [isPlaying, setIsPlaying] = useState(false);
+
+    // Initialize AudioContext once
+    useEffect(() => {
+        audioContextRef.current = new AudioContext();
+
+        // Initialize the speaker
+        sinkRef.current = new LocalSpeakerSink();
+        // Call sinkRef.current.start() once user gestures or at the time you want
+    }, []);
+
+    // Our queueAudio / playNextAudio functions from above
+    function queueAudio(chunk: ArrayBuffer) {
+        setAudioQueue((prev) => {
+            const newQueue = [...prev, chunk];
+            if (!isPlaying) {
+                // Wait a tick, then play
+                playNextAudio(newQueue);
+            }
+            return newQueue;
+        });
+    }
+
+    async function playNextAudio(currentQueue: Array<ArrayBuffer>) {
+        if (!audioContextRef.current) return;
+        if (currentQueue.length === 0) {
+            setIsPlaying(false);
+            return;
+        }
+
+        setIsPlaying(true);
+        const [chunk, ...rest] = currentQueue;
+
+        try {
+            const audioBuffer = await audioContextRef.current.decodeAudioData(chunk.slice(0));
+            const source = audioContextRef.current.createBufferSource();
+            source.buffer = audioBuffer;
+            source.connect(audioContextRef.current.destination);
+
+            source.onended = () => {
+                setAudioQueue((prev) => {
+                    const updated = prev.slice(1);
+                    playNextAudio(updated);
+                    return updated;
+                });
+            };
+
+            source.start(0);
+        } catch (e) {
+            console.error("Error decoding audio:", e);
+            setAudioQueue((prev) => {
+                const updated = prev.slice(1);
+                playNextAudio(updated);
+                return updated;
+            });
+        }
+    }
+
     // Agent + chat logic
-    const agent = useAgent({ 
+    const agent = useAgent({
         agent: "chat",
         onMessage: async (event) => {
-          // If the agent sends audio as a binary Blob:
-          if (event.data instanceof Blob) {
-            const buf = await event.data.arrayBuffer();
-            console.log("Received audio chunk from agent:", buf);
-            speakerRef.current?.write(buf);
-          }
+            // If the agent sends audio as a binary Blob:
+            if (event.data instanceof Blob) {
+                const buf = await event.data.arrayBuffer();
+                console.log("Received audio chunk from agent:", buf);
+                // speakerRef.current?.write(buf);
+                // queueAudio(buf);
+                sinkRef.current?.write(buf);
+            }
         },
     });
 
@@ -84,7 +147,7 @@ export default function Chat() {
         agent,
         maxSteps: 5,
     });
-    
+
     // console.log("Agent messages:", agentMessages);
 
     // Scroll to bottom when messages change
@@ -266,7 +329,7 @@ export default function Chat() {
                                 >
                                     <div
                                         className={`flex gap-2 max-w-[85%] ${isUser ? "flex-row-reverse" : "flex-row"
-                                        }`}
+                                            }`}
                                     >
                                         {showAvatar && !isUser ? (
                                             <Avatar className="h-8 w-8 mt-1 flex-shrink-0">
@@ -287,20 +350,20 @@ export default function Chat() {
                                                             <div key={i}>
                                                                 <Card
                                                                     className={`p-3 rounded-md ${isUser
-                                                                            ? "bg-primary text-primary-foreground rounded-br-none"
-                                                                            : "rounded-bl-none border-assistant-border"
+                                                                        ? "bg-primary text-primary-foreground rounded-br-none"
+                                                                        : "rounded-bl-none border-assistant-border"
                                                                         } ${part.text.startsWith("scheduled message")
                                                                             ? "border-accent/50"
                                                                             : ""
-                                                                    } relative`}
+                                                                        } relative`}
                                                                 >
                                                                     {part.text.startsWith(
                                                                         "scheduled message"
                                                                     ) && (
-                                                                        <span className="absolute -top-3 -left-2 text-base">
-                                                                            🕒
-                                                                        </span>
-                                                                    )}
+                                                                            <span className="absolute -top-3 -left-2 text-base">
+                                                                                🕒
+                                                                            </span>
+                                                                        )}
                                                                     <p className="text-sm whitespace-pre-wrap">
                                                                         {part.text.replace(
                                                                             /^scheduled message: /,
@@ -310,7 +373,7 @@ export default function Chat() {
                                                                 </Card>
                                                                 <p
                                                                     className={`text-xs text-muted-foreground mt-1 ${isUser ? "text-right" : "text-left"
-                                                                    }`}
+                                                                        }`}
                                                                 >
                                                                     {formatTime(
                                                                         new Date(m.createdAt as unknown as string)

@@ -24,7 +24,7 @@ export class ElevenLabsTTS extends TextToSpeechService {
         this.options = {
             modelId: 'eleven_flash_v2_5', // Default to Flash model for lowest latency
             optimizeLatency: 3,           // Max optimization for speed
-            outputFormat: 'pcm_16000',
+            // outputFormat: 'pcm_16000',
             ...options
         };
     }
@@ -35,7 +35,7 @@ export class ElevenLabsTTS extends TextToSpeechService {
         }
 
         return new Promise((resolve, reject) => {
-            const url = `wss://api.elevenlabs.io/v1/text-to-speech/${this.options.voiceId}/stream-input?optimize_streaming_latency=${this.options.optimizeLatency}&output_format=${this.options.outputFormat}&model_id=${this.options.modelId}`;
+            const url = `wss://api.elevenlabs.io/v1/text-to-speech/${this.options.voiceId}/stream-input?optimize_streaming_latency=${this.options.optimizeLatency}&model_id=${this.options.modelId}`;
             logger.info('Connecting to ElevenLabs WebSocket:', url);
             try {
                 this.ws = new WebSocket(url);
