@@ -31,7 +31,7 @@ export class DeepgramStt extends SpeechToTextService {
             interim_results: true,
             utterance_end_ms: 1000,
             vad_events: true,
-            endpointing: 200,
+            endpointing: 150,
         });
         return this.session;
     }
@@ -45,6 +45,8 @@ export class DeepgramStt extends SpeechToTextService {
             logger.debug("Deepgram session already connected");
             return;
         }
+        
+        logger.debug("Connecting to Deepgram STT service...");
         // Create the session
         // This call does not immediately open the WS, but sets up config & readiness
         this.session = this.createSession();
@@ -94,7 +96,7 @@ export class DeepgramStt extends SpeechToTextService {
      */
     async sendAudioChunk(chunk: ArrayBuffer): Promise<void> {
         if (!this.session || !this.session.isConnected()) {
-            logger.error("Deepgram session is not connected. Cannot send audio chunk.");
+            logger.error("Deepgram session is not connected. Cannot send audio chunk.", chunk);
 
             if (this.shouldReconnect) {
                 logger.debug("Reconnecting to Deepgram...");
