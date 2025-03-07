@@ -59,7 +59,16 @@ export class VoiceAgent extends AIChatAgent<Env> {
         this.tts.onAudio((audioChunk) => {
             // For TTS, we want to forward 'audioChunk' back to the client
             if (this.connection) {
-                this.connection.send(audioChunk);
+                const base64Audio = btoa(
+                    String.fromCharCode(...new Uint8Array(audioChunk))
+                );
+
+                this.connection.send(
+                    JSON.stringify({
+                        type: "audio-chunk",
+                        data: base64Audio
+                    })
+                );
             }
         });
 
@@ -67,7 +76,7 @@ export class VoiceAgent extends AIChatAgent<Env> {
         await this.tts.connect();
         logger.debug("TTS service connected");
     }
-    
+
     async onConnect(connection: Connection, ctx: ConnectionContext) {
         logger.debug("VoiceAgent agent connected", { connection });
 
@@ -80,7 +89,7 @@ export class VoiceAgent extends AIChatAgent<Env> {
 
     async handleTranscript(transcript: { text: string; isFinal: boolean }) {
         // logger.debug("Received transcript from STT service", { transcript });
-        
+
         if (transcript.text.length > 0) {
             // Craft a message chunk 
             const messageChunk: TextUIPart = {
@@ -110,7 +119,7 @@ export class VoiceAgent extends AIChatAgent<Env> {
         }
     }
 
-    async onNewGeneratedChunk(event: {chunk: TextStreamPart<any>}) {
+    async onNewGeneratedChunk(event: { chunk: TextStreamPart<any> }) {
         const { chunk } = event;
         if (chunk.type == "text-delta") {
             // Send the text delta to the TTS service
@@ -126,18 +135,18 @@ export class VoiceAgent extends AIChatAgent<Env> {
             this.tts?.sendText(" ", true);
         }
     }
-    
+
     // // Called for each message received on the WebSocket connection
     async onMessage(connection: Connection, message: WSMessage) {
         // If the message is an audio chunk, process it with the STT service
-        if (message instanceof ArrayBuffer ) {
+        if (message instanceof ArrayBuffer) {
             // logger.debug(`Received audio chunk from client ID: ${connection.id}`);
             await this.stt?.sendAudioChunk(message);
             return;
         }
         super.onMessage(connection, message);
     }
-  
+
     /**
      * Called when a chat message arrives from the user.
      * It returns a streaming response (text + possible tool calls).
@@ -160,6 +169,8 @@ export class VoiceAgent extends AIChatAgent<Env> {
                         apiKey: this.env.OPENAI_API_KEY,
                     });
 
+                    // const abortSignal = new AbortController().signal;
+
                     // 3. Stream AI response (GPT-4 or whichever model you pick)
                     //    Merges tool usage instructions if user or AI requested them.
                     const result = streamText({
@@ -174,6 +185,7 @@ export class VoiceAgent extends AIChatAgent<Env> {
                         onFinish,
                         onChunk: this.onNewGeneratedChunk.bind(this),
                         maxSteps: 10,
+                        // abortSignal: abortSignal,
                     });
 
                     // Merge the AI’s text stream into the dataStream (so the client sees the text in real-time).

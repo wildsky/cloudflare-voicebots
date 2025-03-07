@@ -67,13 +67,23 @@ export default function Chat() {
         agent: "chat",
         onMessage: async (event) => {
             // If the agent sends audio as a binary Blob:
-            if (event.data instanceof Blob) {
-                const buf = await event.data.arrayBuffer();
-                console.log("Received audio chunk from agent:", buf);
-                // Send to your speaker sink
-                sinkRef.current?.write(buf);
-            } else {
-                // Possibly text or JSON
+            if (typeof event.data === "string") {
+                try {
+                    const parsed = JSON.parse(event.data);
+                    if (parsed.type === "audio-chunk") {
+                        const binaryString = atob(parsed.data);
+                        const byteArray = new Uint8Array(binaryString.length);
+                        for (let i = 0; i < binaryString.length; i++) {
+                            byteArray[i] = binaryString.charCodeAt(i);
+                        }
+                        const audioBuffer = byteArray.buffer;
+                        // Send to your speaker sink
+                        sinkRef.current?.write(audioBuffer);
+                    }
+                } catch {
+                    // Possibly a different kind of JSON
+                    console.error("Failed to parse JSON:", event.data);
+                }
             }
         },
     });
@@ -281,8 +291,8 @@ export default function Chat() {
                                                             <div key={i}>
                                                                 <Card
                                                                     className={`p-3 rounded-md ${isUser
-                                                                            ? "bg-primary text-primary-foreground rounded-br-none"
-                                                                            : "rounded-bl-none border-assistant-border"
+                                                                        ? "bg-primary text-primary-foreground rounded-br-none"
+                                                                        : "rounded-bl-none border-assistant-border"
                                                                         } ${isScheduled ? "border-accent/50" : ""
                                                                         } relative`}
                                                                 >
