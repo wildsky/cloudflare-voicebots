@@ -1,5 +1,3 @@
-// src/services/tts/tts.ts
-
 /**
  * Abstract base for a text-to-speech (TTS) service.
  * 

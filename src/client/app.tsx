@@ -2,17 +2,20 @@ import { useEffect, useState, useRef, useCallback } from "react";
 import { useAgent } from "agents-sdk/react";
 import { useAgentChat } from "agents-sdk/ai-react";
 import type { Message } from "@ai-sdk/react";
-import { APPROVAL } from "../shared/approval";
 import type { tools } from "../tools/basics";
+import { APPROVAL } from "../shared/approval";
 import { Button } from "./components/ui/button";
 import { Card } from "./components/ui/card";
 import { Input } from "./components/ui/input";
 import { Avatar, AvatarFallback } from "./components/ui/avatar";
 import { Switch } from "./components/ui/switch";
 import { Send, Bot, Trash2, Sun, Moon, Bug, Mic, MicOff } from "lucide-react";
-import { LocalSpeakerSink } from "@/services/ sinks/local_speaker";
 
-// List of tools that require human confirmation
+// Import your AudioSink & AudioSource
+import { LocalSpeakerSink } from "@/services/sinks/local_speaker";
+import { LocalMicrophoneSource } from "@/services/sources/local_mic";
+
+// Tools that require human confirmation
 const toolsRequiringConfirmation: (keyof typeof tools)[] = [
     "getWeatherInformation",
 ];
@@ -25,21 +28,21 @@ export default function Chat() {
     });
     const [showDebug, setShowDebug] = useState(false);
 
-    // ---- NEW mic-related state ----
+    // Microphone toggle
     const [micActive, setMicActive] = useState(false);
-    const mediaRecorderRef = useRef<MediaRecorder | null>(null);
 
-    // const speakerRef = useRef<LocalSpeaker | null>(null);
+    // Refs for local microphone & speaker
+    const micRef = useRef<LocalMicrophoneSource | null>(null);
     const sinkRef = useRef<LocalSpeakerSink | null>(null);
 
+    // For auto-scrolling the chat to the bottom
     const messagesEndRef = useRef<HTMLDivElement>(null);
-
     const scrollToBottom = useCallback(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
     }, []);
 
     useEffect(() => {
-        // Apply theme class on mount and when theme changes
+        // Apply theme class on mount and theme changes
         if (theme === "dark") {
             document.documentElement.classList.add("dark");
             document.documentElement.classList.remove("light");
@@ -47,81 +50,19 @@ export default function Chat() {
             document.documentElement.classList.remove("dark");
             document.documentElement.classList.add("light");
         }
-        // Save theme preference to localStorage
         localStorage.setItem("theme", theme);
     }, [theme]);
 
-    // Scroll to bottom on mount
     useEffect(() => {
         scrollToBottom();
     }, [scrollToBottom]);
 
+    // Toggle theme
     const toggleTheme = () => {
-        const newTheme = theme === "dark" ? "light" : "dark";
-        setTheme(newTheme);
+        setTheme(theme === "dark" ? "light" : "dark");
     };
 
-    const audioContextRef = useRef<AudioContext | null>(null);
-    const [audioQueue, setAudioQueue] = useState<Array<ArrayBuffer>>([]);
-    const [isPlaying, setIsPlaying] = useState(false);
-
-    // Initialize AudioContext once
-    useEffect(() => {
-        audioContextRef.current = new AudioContext();
-
-        // Initialize the speaker
-        sinkRef.current = new LocalSpeakerSink();
-        // Call sinkRef.current.start() once user gestures or at the time you want
-    }, []);
-
-    // Our queueAudio / playNextAudio functions from above
-    function queueAudio(chunk: ArrayBuffer) {
-        setAudioQueue((prev) => {
-            const newQueue = [...prev, chunk];
-            if (!isPlaying) {
-                // Wait a tick, then play
-                playNextAudio(newQueue);
-            }
-            return newQueue;
-        });
-    }
-
-    async function playNextAudio(currentQueue: Array<ArrayBuffer>) {
-        if (!audioContextRef.current) return;
-        if (currentQueue.length === 0) {
-            setIsPlaying(false);
-            return;
-        }
-
-        setIsPlaying(true);
-        const [chunk, ...rest] = currentQueue;
-
-        try {
-            const audioBuffer = await audioContextRef.current.decodeAudioData(chunk.slice(0));
-            const source = audioContextRef.current.createBufferSource();
-            source.buffer = audioBuffer;
-            source.connect(audioContextRef.current.destination);
-
-            source.onended = () => {
-                setAudioQueue((prev) => {
-                    const updated = prev.slice(1);
-                    playNextAudio(updated);
-                    return updated;
-                });
-            };
-
-            source.start(0);
-        } catch (e) {
-            console.error("Error decoding audio:", e);
-            setAudioQueue((prev) => {
-                const updated = prev.slice(1);
-                playNextAudio(updated);
-                return updated;
-            });
-        }
-    }
-
-    // Agent + chat logic
+    // 1) Set up the agent. We'll handle binary audio in onMessage
     const agent = useAgent({
         agent: "chat",
         onMessage: async (event) => {
@@ -129,13 +70,15 @@ export default function Chat() {
             if (event.data instanceof Blob) {
                 const buf = await event.data.arrayBuffer();
                 console.log("Received audio chunk from agent:", buf);
-                // speakerRef.current?.write(buf);
-                // queueAudio(buf);
+                // Send to your speaker sink
                 sinkRef.current?.write(buf);
+            } else {
+                // Possibly text or JSON
             }
         },
     });
 
+    // 2) useAgentChat to handle typical chat features
     const {
         messages: agentMessages,
         input: agentInput,
@@ -148,11 +91,51 @@ export default function Chat() {
         maxSteps: 5,
     });
 
-    // console.log("Agent messages:", agentMessages);
+    // 3) Once the component mounts, initialize mic + speaker
+    useEffect(() => {
+        // Make a mic + speaker
+        micRef.current = new LocalMicrophoneSource();
+        sinkRef.current = new LocalSpeakerSink();
+
+        // We'll pass the mic data to the agent
+        const mic = micRef.current;
+        const handleAudioData = (chunk: ArrayBuffer) => {
+            agent.send(chunk);
+        };
+        mic.onAudioData(handleAudioData);
+
+        // Start the speaker if there's any "start()" logic
+        // e.g. sinkRef.current?.start();
+
+        return () => {
+            // Cleanup
+            micRef.current?.offAudioData(handleAudioData);
+            micRef.current?.stop();
+            sinkRef.current?.stop();
+        };
+    }, [agent]);
+
+    // 4) React to micActive changes
+    useEffect(() => {
+        const mic = micRef.current;
+        if (!mic) return;
+
+        if (micActive) {
+            void mic.start();
+        } else {
+            void mic.stop();
+        }
+        // Cleanup if unmounted while active
+        return () => {
+            void mic.stop();
+        };
+    }, [micActive]);
 
     // Scroll to bottom when messages change
     useEffect(() => {
-        agentMessages.length > 0 && scrollToBottom();
+        if (agentMessages.length > 0) {
+            scrollToBottom();
+        }
     }, [agentMessages, scrollToBottom]);
 
     const pendingToolCallConfirmation = agentMessages.some((m: Message) =>
@@ -166,61 +149,9 @@ export default function Chat() {
         )
     );
 
-    // Format message timestamps
     const formatTime = (date: Date) => {
         return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
     };
-
-    /**
-     * Start recording from the mic, send binary chunks to the agent every 250ms.
-     */
-    async function startMic() {
-        try {
-            const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-            const mediaRecorder = new MediaRecorder(stream);
-
-            mediaRecorder.ondataavailable = async (evt) => {
-                if (evt.data.size > 0) {
-                    // Convert Blob to ArrayBuffer
-                    const audioBuffer = await evt.data.arrayBuffer();
-                    // Send directly over the agent's WebSocket as binary
-                    agent.send(audioBuffer);
-                }
-            };
-
-            mediaRecorder.start(250); // collect data in 250ms chunks
-            mediaRecorderRef.current = mediaRecorder;
-        } catch (error) {
-            console.error("Microphone access denied or error:", error);
-            setMicActive(false);
-        }
-    }
-
-    /**
-     * Stop recording from the mic, release resources.
-     */
-    function stopMic() {
-        if (mediaRecorderRef.current) {
-            mediaRecorderRef.current.stop();
-            mediaRecorderRef.current = null;
-        }
-    }
-
-    /**
-     * Whenever micActive changes, start/stop the mic accordingly.
-     */
-    useEffect(() => {
-        if (micActive) {
-            startMic();
-        } else {
-            stopMic();
-        }
-        // Cleanup if we unmount while mic is active
-        return () => {
-            stopMic();
-        };
-        // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [micActive]);
 
     return (
         <div className="h-[100vh] w-full bg-gradient-to-br from-[#F48120]/10 via-background/30 to-[#FAAD3F]/10 backdrop-blur-md p-4 flex justify-center items-center bg-fixed overflow-hidden">
@@ -345,44 +276,32 @@ export default function Chat() {
                                             <div>
                                                 {m.parts?.map((part, i) => {
                                                     if (part.type === "text") {
+                                                        const isScheduled = part.text.startsWith("scheduled message");
                                                         return (
-                                                            // biome-ignore lint/suspicious/noArrayIndexKey: it's fine here
                                                             <div key={i}>
                                                                 <Card
                                                                     className={`p-3 rounded-md ${isUser
-                                                                        ? "bg-primary text-primary-foreground rounded-br-none"
-                                                                        : "rounded-bl-none border-assistant-border"
-                                                                        } ${part.text.startsWith("scheduled message")
-                                                                            ? "border-accent/50"
-                                                                            : ""
+                                                                            ? "bg-primary text-primary-foreground rounded-br-none"
+                                                                            : "rounded-bl-none border-assistant-border"
+                                                                        } ${isScheduled ? "border-accent/50" : ""
                                                                         } relative`}
                                                                 >
-                                                                    {part.text.startsWith(
-                                                                        "scheduled message"
-                                                                    ) && (
-                                                                            <span className="absolute -top-3 -left-2 text-base">
-                                                                                🕒
-                                                                            </span>
-                                                                        )}
+                                                                    {isScheduled && (
+                                                                        <span className="absolute -top-3 -left-2 text-base">🕒</span>
+                                                                    )}
                                                                     <p className="text-sm whitespace-pre-wrap">
-                                                                        {part.text.replace(
-                                                                            /^scheduled message: /,
-                                                                            ""
-                                                                        )}
+                                                                        {part.text.replace(/^scheduled message: /, "")}
                                                                     </p>
                                                                 </Card>
                                                                 <p
                                                                     className={`text-xs text-muted-foreground mt-1 ${isUser ? "text-right" : "text-left"
                                                                         }`}
                                                                 >
-                                                                    {formatTime(
-                                                                        new Date(m.createdAt as unknown as string)
-                                                                    )}
+                                                                    {formatTime(new Date(m.createdAt as unknown as string))}
                                                                 </p>
                                                             </div>
                                                         );
                                                     }
-
                                                     if (part.type === "tool-invocation") {
                                                         const toolInvocation = part.toolInvocation;
                                                         const toolCallId = toolInvocation.toolCallId;
@@ -394,18 +313,12 @@ export default function Chat() {
                                                             toolInvocation.state === "call"
                                                         ) {
                                                             return (
-                                                                <Card
-                                                                    // biome-ignore lint/suspicious/noArrayIndexKey: it's fine here
-                                                                    key={i}
-                                                                    className="p-4 my-3 bg-secondary/30 border-secondary/50 rounded-md"
-                                                                >
+                                                                <Card key={i} className="p-4 my-3 bg-secondary/30 border-secondary/50 rounded-md">
                                                                     <div className="flex items-center gap-2 mb-3">
                                                                         <div className="bg-[#F48120]/10 p-1.5 rounded-full">
                                                                             <Bot className="h-4 w-4 text-[#F48120]" />
                                                                         </div>
-                                                                        <h4 className="font-medium">
-                                                                            {toolInvocation.toolName}
-                                                                        </h4>
+                                                                        <h4 className="font-medium">{toolInvocation.toolName}</h4>
                                                                     </div>
 
                                                                     <div className="mb-3">
@@ -413,11 +326,7 @@ export default function Chat() {
                                                                             Arguments:
                                                                         </h5>
                                                                         <pre className="bg-background/80 p-2 rounded-md text-xs overflow-auto">
-                                                                            {JSON.stringify(
-                                                                                toolInvocation.args,
-                                                                                null,
-                                                                                2
-                                                                            )}
+                                                                            {JSON.stringify(toolInvocation.args, null, 2)}
                                                                         </pre>
                                                                     </div>
 
@@ -468,9 +377,7 @@ export default function Chat() {
                 <form
                     onSubmit={(e) =>
                         handleAgentSubmit(e, {
-                            data: {
-                                annotations: { hello: "world" },
-                            },
+                            data: { annotations: { hello: "world" } },
                         })
                     }
                     className="p-3 bg-input-background absolute bottom-0 left-0 right-0 z-10 border-t border-assistant-border/30"
@@ -495,6 +402,7 @@ export default function Chat() {
                                 }}
                             />
                         </div>
+
                         {/* NEW MICROPHONE BUTTON */}
                         <Button
                             type="button"

@@ -1,5 +1,3 @@
-// src/services/audioSink/AudioSink.ts
-
 /**
  * Abstract base for an audio sink (a "speaker").
  * Provide a standard interface to play raw audio data.

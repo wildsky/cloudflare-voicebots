@@ -19,7 +19,7 @@ export class LocalMicrophoneSource extends AudioSource {
         this.mediaRecorder = new MediaRecorder(stream, { mimeType: "audio/webm" });
 
         this.mediaRecorder.addEventListener("dataavailable", async (event) => {
-            logger.debug("Received audio data chunk:", event.data);
+            // logger.debug("Received audio data chunk:", event.data);
             if (event.data.size > 0) {
                 const arrayBuffer = await event.data.arrayBuffer();
                 this.callbacks.forEach((cb) => cb(arrayBuffer));
