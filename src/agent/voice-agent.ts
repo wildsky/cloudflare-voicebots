@@ -22,21 +22,21 @@ import { log } from "console";
 import type { Connection, ConnectionContext, WSMessage } from "partyserver";
 import { DeepgramStt, type SpeechToTextService } from "@/services/stt";
 import type { TextUIPart } from "@ai-sdk/ui-utils";
+import type { TextToSpeechService } from "@/services/tts/tts";
+import { ElevenLabsTTS } from "@/services/tts/elevenlabs";
+import { LmntTTS } from "@/services/tts/lmnt";
 
+const sentence_fragment_delimiters: string = ".?!;:,\n…)]}。-";
+const full_sentence_delimiters: string = ".?!\n…。";
 
 export class VoiceAgent extends AIChatAgent<Env> {
     private connection?: Connection;
     private stt?: SpeechToTextService;
+    private tts?: TextToSpeechService;
     private transcriptAccumulator: TextUIPart[] = [];
 
     async onStart() {
         logger.debug("VoiceAgent agent started");
-    }
-    
-    async onConnect(connection: Connection, ctx: ConnectionContext) {
-        logger.debug("VoiceAgent agent connected", { connection });
-
-        this.connection = connection;
 
         logger.debug("Initializing STT service");
 
@@ -48,6 +48,31 @@ export class VoiceAgent extends AIChatAgent<Env> {
         await this.stt.connect();
 
         logger.debug("STT service connected");
+
+        this.tts = new ElevenLabsTTS({
+            apiKey: this.env.ELEVENLABS_API_KEY,
+            voiceId: '21m00Tcm4TlvDq8ikWAM',
+            modelId: 'eleven_flash_v2_5',
+            optimizeLatency: 4
+        });
+        this.tts.onAudio((audioChunk) => {
+            logger.debug("Received audio chunk from TTS service", { audioChunk });
+
+            // For TTS, we want to forward 'audioChunk' back to the client
+            if (this.connection) {
+                this.connection.send(audioChunk);
+            }
+        });
+
+        logger.debug("Connecting to TTS service");
+        await this.tts.connect();
+        logger.debug("TTS service connected");
+    }
+    
+    async onConnect(connection: Connection, ctx: ConnectionContext) {
+        logger.debug("VoiceAgent agent connected", { connection });
+
+        this.connection = connection;
         // Check the request at ctx.request
         // Authenticate the client
         // Give them the OK.
@@ -89,7 +114,17 @@ export class VoiceAgent extends AIChatAgent<Env> {
     async onNewGeneratedChunk(event: {chunk: TextStreamPart<any>}) {
         const { chunk } = event;
         if (chunk.type == "text-delta") {
-
+            // Send the text delta to the TTS service
+            // Determine wether to flush based on if the sentence is complete.
+            // Check if the end of the sentence is reached by comparing the last character with the delimiters
+            const isEndOfSentence = full_sentence_delimiters.includes(chunk.textDelta[chunk.textDelta.length - 1]);
+            const isEndOfParagraph = sentence_fragment_delimiters.includes(chunk.textDelta[chunk.textDelta.length - 1]);
+            const flush = isEndOfSentence || isEndOfParagraph;
+            logger.debug("Sending text delta to TTS service", { chunk, flush });
+            this.tts?.sendText(chunk.textDelta, flush);
+        } else if (chunk.type == "finish") {
+            logger.debug("Received finish event from AI", { chunk });
+            this.tts?.sendText(" ", true);
         }
     }
     

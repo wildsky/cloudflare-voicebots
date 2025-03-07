@@ -11,4 +11,13 @@ export default defineConfig({
       "@": path.resolve(__dirname, "./src"),
     },
   },
+  build: {
+    // If you have an SSR or server build, you can define rollupOptions.external or noExternal:
+    rollupOptions: {
+      external: ["ws"], // So it doesn't get bundled for browser
+    },
+  },
+  ssr: {
+    noExternal: ["ws"],
+  },
 });

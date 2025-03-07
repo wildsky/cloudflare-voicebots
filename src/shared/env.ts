@@ -9,6 +9,7 @@ export type Env = {
   OPENAI_API_KEY: string;
   DEEPGRAM_API_KEY: string;
   ELEVENLABS_API_KEY: string;
+  LMNT_API_KEY: string;
 
   Chat: AgentNamespace<VoiceAgent>;
   // Voice: AgentNamespace<VoiceAgent>;    // Our new voice assistant agent

@@ -1,6 +1,5 @@
 import { routeAgentRequest } from "agents-sdk";
 import type { Env } from "./shared/env";
-import type { Chat } from "./agent/agent";
 import { logger } from "./utils";
 
 // export type { Env } from "./shared/env";

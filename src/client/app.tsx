@@ -10,6 +10,7 @@ import { Input } from "./components/ui/input";
 import { Avatar, AvatarFallback } from "./components/ui/avatar";
 import { Switch } from "./components/ui/switch";
 import { Send, Bot, Trash2, Sun, Moon, Bug, Mic, MicOff } from "lucide-react";
+import type { LocalSpeaker } from "@/services/ sinks/local_speaker";
 
 // List of tools that require human confirmation
 const toolsRequiringConfirmation: (keyof typeof tools)[] = [
@@ -27,6 +28,8 @@ export default function Chat() {
     // ---- NEW mic-related state ----
     const [micActive, setMicActive] = useState(false);
     const mediaRecorderRef = useRef<MediaRecorder | null>(null);
+
+    const speakerRef = useRef<LocalSpeaker | null>(null);
 
     const messagesEndRef = useRef<HTMLDivElement>(null);
 
@@ -58,7 +61,17 @@ export default function Chat() {
     };
 
     // Agent + chat logic
-    const agent = useAgent({ agent: "chat" });
+    const agent = useAgent({ 
+        agent: "chat",
+        onMessage: async (event) => {
+          // If the agent sends audio as a binary Blob:
+          if (event.data instanceof Blob) {
+            const buf = await event.data.arrayBuffer();
+            console.log("Received audio chunk from agent:", buf);
+            speakerRef.current?.write(buf);
+          }
+        },
+    });
 
     const {
         messages: agentMessages,
