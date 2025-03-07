@@ -10,6 +10,7 @@ export class DeepgramStt extends SpeechToTextService {
     private deepgram: DeepgramClient;
     private session?: ListenLiveClient;
     private transcriptionCallbacks: Array<(t: { text: string; isFinal: boolean }) => void> = [];
+    private shouldReconnect = true;
 
     /**
      * If you're constructing with an API key:
@@ -19,13 +20,7 @@ export class DeepgramStt extends SpeechToTextService {
         this.deepgram = createClient(this.apiKey);
     }
 
-    /**
-     * Connect to Deepgram by creating a live session.
-     * You can customize your config here (sample_rate, channels, etc.).
-     */
-    async connect(): Promise<void> {
-        // Create the session
-        // This call does not immediately open the WS, but sets up config & readiness
+    private createSession() {
         this.session = this.deepgram.listen.live({
             model: "nova-3",
             // language: "en-US",
@@ -38,6 +33,21 @@ export class DeepgramStt extends SpeechToTextService {
             vad_events: true,
             endpointing: 200,
         });
+        return this.session;
+    }
+
+    /**
+     * Connect to Deepgram by creating a live session.
+     * You can customize your config here (sample_rate, channels, etc.).
+     */
+    async connect(): Promise<void> {
+        if (this.session && this.session.isConnected()) {
+            logger.debug("Deepgram session already connected");
+            return;
+        }
+        // Create the session
+        // This call does not immediately open the WS, but sets up config & readiness
+        this.session = this.createSession();
 
         // When the session "opens" (WS connected), we add transcript listeners
         this.session.on(LiveTranscriptionEvents.Open, () => {
@@ -69,8 +79,13 @@ export class DeepgramStt extends SpeechToTextService {
             logger.error("Deepgram session error:", error);
         });
         this.session.on(LiveTranscriptionEvents.Close, () => {
-            logger.debug("Deepgram session closed.");
-            this.session = undefined;
+            logger.debug("Deepgram session closed");
+            if (this.shouldReconnect) {
+                logger.debug("Reconnecting to Deepgram...");
+                setTimeout(() => {
+                    this.connect();
+                }, 1000); // Retry after 1 second
+            }
         });
     }
 
@@ -80,16 +95,23 @@ export class DeepgramStt extends SpeechToTextService {
     async sendAudioChunk(chunk: ArrayBuffer): Promise<void> {
         if (!this.session || !this.session.isConnected()) {
             logger.error("Deepgram session is not connected. Cannot send audio chunk.");
-            return;
+
+            if (this.shouldReconnect) {
+                logger.debug("Reconnecting to Deepgram...");
+                await this.connect();
+            } else {
+                return;
+            }
         }
         // logger.debug("Sending audio chunk to Deepgram:", chunk);
-        this.session.send(chunk);
+        this.session?.send(chunk);
     }
 
     /**
      * Clean up the session, close the WebSocket.
      */
     async close(): Promise<void> {
+        this.shouldReconnect = false; // Stop further reconnection attempts
         if (this.session && this.session.isConnected()) {
             this.session.requestClose();
         }
