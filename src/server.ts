@@ -12,7 +12,7 @@ export * from './agent';
  */
 export default {
     async fetch(request: Request, env: Env, ctx: ExecutionContext) {
-        // logger.debug("Worker fetch event", { request });
+        logger.debug("Worker fetch event", { request });
         if (!env.OPENAI_API_KEY) {
             console.error(
                 "OPENAI_API_KEY is not set. Make sure to set it locally in .dev.vars, and deploy secrets with `wrangler secret bulk .dev.vars`."

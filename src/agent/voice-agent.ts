@@ -123,20 +123,20 @@ export class VoiceAgent extends AIChatAgent<Env> {
 
     async onNewGeneratedChunk(event: { chunk: TextStreamPart<any> }) {
         const { chunk } = event;
-        if (chunk.type == "text-delta") {
-            // Send the text delta to the TTS service
-            // Determine wether to flush based on if the sentence is complete.
-            // Check if the end of the sentence is reached by comparing the last character with the delimiters
-            const isEndOfSentence = full_sentence_delimiters.includes(chunk.textDelta[chunk.textDelta.length - 1]);
-            const isEndOfParagraph = sentence_fragment_delimiters.includes(chunk.textDelta[chunk.textDelta.length - 1]);
-            const flush = isEndOfSentence || isEndOfParagraph;
-            // If there are special characters, we need to remove them
-            logger.debug("Sending text delta to TTS service", { chunk, flush });
-            this.tts?.sendText(chunk.textDelta, flush);
-        } else if (chunk.type == "finish") {
-            logger.debug("Received finish event from AI", { chunk });
-            this.tts?.sendText(" ", true);
-        }
+        // if (chunk.type == "text-delta") {
+        //     // Send the text delta to the TTS service
+        //     // Determine wether to flush based on if the sentence is complete.
+        //     // Check if the end of the sentence is reached by comparing the last character with the delimiters
+        //     const isEndOfSentence = full_sentence_delimiters.includes(chunk.textDelta[chunk.textDelta.length - 1]);
+        //     const isEndOfParagraph = sentence_fragment_delimiters.includes(chunk.textDelta[chunk.textDelta.length - 1]);
+        //     const flush = isEndOfSentence || isEndOfParagraph;
+        //     // If there are special characters, we need to remove them
+        //     logger.debug("Sending text delta to TTS service", { chunk, flush });
+        //     this.tts?.sendText(chunk.textDelta, flush);
+        // } else if (chunk.type == "finish") {
+        //     logger.debug("Received finish event from AI", { chunk });
+        //     this.tts?.sendText(" ", true);
+        // }
     }
 
     // // Called for each message received on the WebSocket connection

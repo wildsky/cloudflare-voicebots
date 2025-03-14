@@ -14,6 +14,7 @@ import { Send, Bot, Trash2, Sun, Moon, Bug, Mic, MicOff } from "lucide-react";
 // Import your AudioSink & AudioSource
 import { LocalSpeakerSink } from "@/services/sinks/local_speaker";
 import { LocalMicrophoneSource } from "@/services/sources/local_mic";
+import { generateId } from "ai";
 
 // Tools that require human confirmation
 const toolsRequiringConfirmation: (keyof typeof tools)[] = [
@@ -67,11 +68,47 @@ export default function Chat() {
     }, [scrollToBottom]);
 
     const toggleTheme = () => setTheme(theme === "dark" ? "light" : "dark");
+    const formatTime = (date: Date) =>
+        date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+
+    // --- Conversation Sidebar Logic ---
+    useEffect(() => {
+        if (!currentConvId) {
+            // Fetch the first conversation or create a new one
+            const existingConv = conversations[0];
+            if (existingConv) {
+                console.log("Switching to existing conversation:", existingConv);
+                setCurrentConvId(existingConv.id);
+            } else {
+                const newId = generateId();
+                console.log("Creating new conversation with ID:", newId);
+                setCurrentConvId(newId);
+                setConversations((prev) => [
+                    { id: newId, title: `Chat ${new Date().toLocaleTimeString()}`, messages: [] },
+                    ...prev,
+                ]);
+            }
+        }
+    }, [currentConvId]);
+
+    const handleNewChat = () => {
+        const newId = generateId();
+        console.log("handleNewChat: Creating new conversation with ID:", newId);
+        setCurrentConvId(newId);
+        setConversations((prev) => [{ id: newId, title: `Chat ${new Date().toLocaleTimeString()}`, messages: [] }, ...prev]);
+    };
+
+    const handleSwitchChat = (convId: string) => {
+        if (convId === currentConvId) return;
+        console.log("handleSwitchChat: Switching to conversation with ID:", convId);
+        setCurrentConvId(convId);
+        // In a complete implementation, load the conversation's messages here
+    };
 
     // Initialize the agent with onMessage handler for binary audio
     const agent = useAgent({
         agent: "chat",
-        name: "AI Chat Agent",
+        name: currentConvId,
         onMessage: async (event) => {
             if (typeof event.data === "string") {
                 try {
@@ -98,11 +135,13 @@ export default function Chat() {
         handleInputChange: handleAgentInputChange,
         handleSubmit: handleAgentSubmit,
         addToolResult,
-        clearHistory,
+        clearHistory: deleteHistory,
     } = useAgentChat({
         agent,
         maxSteps: 5,
     });
+
+    console.log("Agent messages:", agentMessages, "agent id:", agent.id, "agent name:", agent.name);
 
     // Initialize mic & speaker on mount
     useEffect(() => {
@@ -154,32 +193,6 @@ export default function Chat() {
         )
     );
 
-    const formatTime = (date: Date) =>
-        date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-
-    // --- Conversation Sidebar Logic ---
-    useEffect(() => {
-        if (!currentConvId) {
-            const newId = Date.now().toString();
-            setCurrentConvId(newId);
-            setConversations([{ id: newId, title: `Chat ${new Date().toLocaleTimeString()}`, messages: [] }]);
-            clearHistory();
-        }
-    }, [currentConvId, clearHistory]);
-
-    const handleNewChat = () => {
-        clearHistory();
-        const newId = Date.now().toString();
-        setCurrentConvId(newId);
-        setConversations((prev) => [{ id: newId, title: `Chat ${new Date().toLocaleTimeString()}`, messages: [] }, ...prev]);
-    };
-
-    const handleSwitchChat = (convId: string) => {
-        if (convId === currentConvId) return;
-        clearHistory();
-        setCurrentConvId(convId);
-        // In a complete implementation, load the conversation's messages here
-    };
 
     return (
         <div className="h-screen w-screen bg-gradient-to-br from-[#F48120]/10 via-background/30 to-[#FAAD3F]/10 backdrop-blur-md p-4 flex overflow-hidden">
@@ -245,7 +258,7 @@ export default function Chat() {
                         variant="ghost"
                         size="icon"
                         className="rounded-full h-9 w-9"
-                        onClick={clearHistory}
+                        onClick={deleteHistory}
                     >
                         <Trash2 className="h-5 w-5" />
                     </Button>
