@@ -25,6 +25,7 @@ import type { TextUIPart } from "@ai-sdk/ui-utils";
 import type { TextToSpeechService } from "@/services/tts/tts";
 import { InworldTTS } from "@/services/tts/inworld-tts";
 import { createWriteStream } from "fs";
+import { initializeDatabaseTools } from "@/tools/database";
 
 const sentence_fragment_delimiters: string = ".?!;:,\n…)]}。-";
 const full_sentence_delimiters: string = ".?!\n…。";
@@ -58,6 +59,10 @@ export class VoiceAgent extends AIChatAgent<Env> {
 
     async onStart() {
         logger.debug("VoiceAgent agent started");
+
+        // Initialize database tools with D1 binding
+        initializeDatabaseTools(this.env.USER_DB);
+        logger.debug("Database tools initialized");
 
         logger.debug("Initializing STT service");
 

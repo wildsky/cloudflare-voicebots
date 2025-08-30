@@ -6,6 +6,13 @@ import { tool } from "ai";
 import { z } from "zod";
 
 import { agentContext } from "../agent/agent-utils";
+import { 
+    findUserByPhone, 
+    findUserByName, 
+    getUserProfile, 
+    updateUserInfo, 
+    listRecentUsers 
+} from "./database";
 
 /**
  * Weather information tool that requires human confirmation
@@ -71,6 +78,12 @@ export const tools = {
     getWeatherInformation,
     getLocalTime,
     scheduleTask,
+    // Database tools
+    findUserByPhone,
+    findUserByName,
+    getUserProfile,
+    updateUserInfo,
+    listRecentUsers,
 };
 
 /**

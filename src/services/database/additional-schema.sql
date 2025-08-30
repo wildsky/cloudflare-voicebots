@@ -1,0 +1,46 @@
+-- Additional tables for Caily database
+
+-- CALL_ACTIVITY table
+CREATE TABLE IF NOT EXISTS call_activity (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  userID INTEGER,
+  dateAdded TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  streamSID VARCHAR(50),
+  summary TEXT,
+  keyTopics TEXT,
+  followupItems TEXT,
+  sentiment REAL
+);
+
+-- CORE_MEMORIES table  
+CREATE TABLE IF NOT EXISTS core_memories (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  userID INTEGER,
+  dateAdded TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  streamSID VARCHAR(50),
+  summary TEXT,
+  keyTopics TEXT,
+  followupItems TEXT,
+  sentiment REAL
+);
+
+-- PRIMARY_USER table
+CREATE TABLE IF NOT EXISTS primary_user (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  guid VARCHAR(50),
+  dateAdded TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  phone INTEGER,
+  fName VARCHAR(20),
+  lName VARCHAR(20),
+  temperature REAL DEFAULT 0.70
+);
+
+-- SHOPPING_LIST table
+CREATE TABLE IF NOT EXISTS shopping_list (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  dateAdded TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  status INTEGER NOT NULL DEFAULT 0,
+  userID INTEGER NOT NULL,
+  item VARCHAR(100) NOT NULL DEFAULT '',
+  quantity INTEGER NOT NULL DEFAULT 1
+);

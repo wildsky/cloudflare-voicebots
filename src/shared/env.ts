@@ -13,4 +13,5 @@ export type Env = {
   Chat: AgentNamespace<Chat>;
   voicechat: AgentNamespace<VoiceAgent>;
   CONVERSATION: DurableObjectNamespace;  // New binding for conversation persistence
+  USER_DB: D1Database;  // Database for user information
 };

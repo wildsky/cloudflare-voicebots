@@ -18,7 +18,9 @@
       "WebFetch(domain:docs.inworld.ai)",
       "WebFetch(domain:github.com)",
       "Bash(npm run build:*)",
-      "Bash(npm run:*)"
+      "Bash(npm run:*)",
+      "Bash(npx wrangler d1 create:*)",
+      "Bash(npx wrangler d1 execute:*)"
     ],
     "deny": [],
     "ask": []

@@ -42,5 +42,12 @@
   ],
   "observability": {
     "enabled": true
-  }
+  },
+  "d1_databases": [
+    {
+      "binding": "USER_DB",
+      "database_name": "voicebot-users",
+      "database_id": "23778517-6912-4320-a795-99ed29251c3b"
+    }
+  ]
 }
