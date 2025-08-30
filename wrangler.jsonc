@@ -13,6 +13,10 @@
     "bindings": [
       {
         "name": "Chat",
+        "class_name": "Chat"
+      },
+      {
+        "name": "voicechat",
         "class_name": "VoiceAgent"
       },
       {
@@ -25,7 +29,14 @@
     {
       "tag": "v1",
       "new_sqlite_classes": [
-        "VoiceAgent"
+        "VoiceAgent",
+        "ConversationDO"
+      ]
+    },
+    {
+      "tag": "v2",
+      "new_sqlite_classes": [
+        "Chat"
       ]
     }
   ],

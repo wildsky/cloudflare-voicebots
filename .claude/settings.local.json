@@ -1,0 +1,21 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm start)",
+      "Bash(npm install)",
+      "Bash(npm run deploy:*)",
+      "Bash(npx wrangler tail:*)",
+      "Bash(npx wrangler secret:*)",
+      "Bash(curl:*)",
+      "Read(/private/tmp/**)",
+      "WebSearch",
+      "Read(/private/tmp/**)",
+      "Read(/tmp/agents-starter/src/**)",
+      "Read(/tmp/agents-starter/**)",
+      "Bash(npm uninstall:*)",
+      "Bash(npm install:*)"
+    ],
+    "deny": [],
+    "ask": []
+  }
+}

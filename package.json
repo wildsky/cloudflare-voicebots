@@ -35,7 +35,7 @@
     "typescript": "^5.8.2",
     "vite": "^6.2.0",
     "vitest": "3.0.7",
-    "wrangler": "^3.114.0"
+    "wrangler": "^4.33.1"
   },
   "dependencies": {
     "@ai-sdk/openai": "^1.2.0",
@@ -45,7 +45,7 @@
     "@radix-ui/react-avatar": "^1.1.3",
     "@radix-ui/react-slot": "^1.1.2",
     "@radix-ui/react-switch": "^1.1.3",
-    "agents-sdk": "^0.0.23",
+    "agents": "^0.0.113",
     "ai": "^4.1.51",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",

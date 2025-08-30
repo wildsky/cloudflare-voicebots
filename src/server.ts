@@ -1,10 +1,12 @@
-import { routeAgentRequest } from "agents-sdk";
+import { routeAgentRequest } from "agents";
 import type { Env } from "./shared/env";
 import type { Chat } from "./agent/agent";
 import { logger } from "./utils";
 
 // export type { Env } from "./shared/env";
-export * from './agent';
+export { Chat } from './agent/agent';
+export { VoiceAgent } from './agent/voice-agent';
+export { ConversationDO } from './conversations';
 
 /**
  * The worker entry point, which routes all incoming fetch requests.

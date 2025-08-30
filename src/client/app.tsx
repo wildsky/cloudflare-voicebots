@@ -1,6 +1,6 @@
 import { useEffect, useState, useRef, useCallback } from "react";
-import { useAgent } from "agents-sdk/react";
-import { useAgentChat } from "agents-sdk/ai-react";
+import { useAgent } from "agents/react";
+import { useAgentChat } from "agents/ai-react";
 import type { Message } from "@ai-sdk/react";
 import type { tools } from "../tools/basics";
 import { APPROVAL } from "../shared/approval";
@@ -105,28 +105,32 @@ export default function Chat() {
         // In a complete implementation, load the conversation's messages here
     };
 
-    // Initialize the agent with onMessage handler for binary audio
-    const agent = useAgent({
-        agent: "chat",
-        name: currentConvId,
-        onMessage: async (event) => {
-            if (typeof event.data === "string") {
-                try {
-                    const parsed = JSON.parse(event.data);
-                    if (parsed.type === "audio-chunk") {
-                        const binaryString = atob(parsed.data);
-                        const byteArray = new Uint8Array(binaryString.length);
-                        for (let i = 0; i < binaryString.length; i++) {
-                            byteArray[i] = binaryString.charCodeAt(i);
-                        }
-                        const audioBuffer = byteArray.buffer;
-                        sinkRef.current?.write(audioBuffer);
+    // Memoize the onMessage callback to prevent agent recreation
+    const onMessage = useCallback(async (event) => {
+        if (typeof event.data === "string") {
+            try {
+                const parsed = JSON.parse(event.data);
+                if (parsed.type === "audio-chunk") {
+                    const binaryString = atob(parsed.data);
+                    const byteArray = new Uint8Array(binaryString.length);
+                    for (let i = 0; i < binaryString.length; i++) {
+                        byteArray[i] = binaryString.charCodeAt(i);
                     }
-                } catch {
-                    console.error("Failed to parse JSON:", event.data);
+                    const audioBuffer = byteArray.buffer;
+                    sinkRef.current?.write(audioBuffer);
                 }
+            } catch {
+                console.error("Failed to parse JSON:", event.data);
             }
-        },
+        }
+    }, []);
+
+    // Initialize the agent with onMessage handler for binary audio
+    // Use voicechat agent when mic is active, otherwise use regular chat
+    const agent = useAgent({
+        agent: micActive ? "voicechat" : "chat", 
+        name: currentConvId,
+        onMessage,
     });
 
     const {
@@ -141,33 +145,116 @@ export default function Chat() {
         maxSteps: 5,
     });
 
-    console.log("Agent messages:", agentMessages, "agent id:", agent.id, "agent name:", agent.name);
+    console.log("Agent messages:", agentMessages, "agent id:", agent.id, "agent name:", agent.name, "micActive:", micActive, "agent type:", micActive ? "voicechat" : "chat");
 
     // Initialize mic & speaker on mount
     useEffect(() => {
-        micRef.current = new LocalMicrophoneSource();
-        sinkRef.current = new LocalSpeakerSink();
+        if (!micRef.current) {
+            micRef.current = new LocalMicrophoneSource();
+        }
+        if (!sinkRef.current) {
+            sinkRef.current = new LocalSpeakerSink();
+        }
+    }, []);
 
+    // Direct WebSocket connection for voice agent
+    const voiceWebSocketRef = useRef<WebSocket | null>(null);
+    
+    // Register audio callback when agent changes
+    useEffect(() => {
         const mic = micRef.current;
+        if (!mic) {
+            console.log("Browser: No microphone available for callback registration");
+            return;
+        }
+
+        console.log("Browser: Registering audio callback for agent:", agent.id, "micActive:", micActive);
+
         const handleAudioData = (chunk: ArrayBuffer) => {
-            agent.send(chunk);
+            console.log("Browser: Sending audio chunk to agent", agent.id, "size:", chunk.byteLength);
+            
+            // If mic is active and we're using voicechat, try direct WebSocket
+            if (micActive && voiceWebSocketRef.current?.readyState === WebSocket.OPEN) {
+                console.log("Browser: Sending via direct WebSocket");
+                voiceWebSocketRef.current.send(chunk);
+            } else {
+                console.log("Browser: Sending via agent.send()");
+                agent.send(chunk);
+            }
         };
+        
         mic.onAudioData(handleAudioData);
 
         return () => {
+            console.log("Browser: Unregistering audio callback for agent:", agent.id);
             mic.offAudioData(handleAudioData);
-            mic.stop();
-            sinkRef.current?.stop();
         };
-    }, [agent]);
+    }, [agent, micActive]);
+
+    // Create direct WebSocket connection when switching to voice mode
+    useEffect(() => {
+        if (micActive && currentConvId) {
+            console.log("Browser: Creating direct WebSocket connection for voice chat");
+            const wsUrl = `${window.location.origin.replace('http', 'ws')}/agents/voicechat/${currentConvId}`;
+            console.log("Browser: Connecting to:", wsUrl);
+            
+            voiceWebSocketRef.current = new WebSocket(wsUrl);
+            
+            voiceWebSocketRef.current.onopen = () => {
+                console.log("Browser: Direct WebSocket connected");
+            };
+            
+            voiceWebSocketRef.current.onmessage = async (event) => {
+                console.log("Browser: Received message on direct WebSocket");
+                if (typeof event.data === "string") {
+                    try {
+                        const parsed = JSON.parse(event.data);
+                        if (parsed.type === "audio-chunk") {
+                            console.log("Browser: Received audio chunk for playback");
+                            const binaryString = atob(parsed.data);
+                            const byteArray = new Uint8Array(binaryString.length);
+                            for (let i = 0; i < binaryString.length; i++) {
+                                byteArray[i] = binaryString.charCodeAt(i);
+                            }
+                            const audioBuffer = byteArray.buffer;
+                            sinkRef.current?.write(audioBuffer);
+                        }
+                    } catch (e) {
+                        console.error("Failed to parse WebSocket message:", e);
+                    }
+                }
+            };
+            
+            voiceWebSocketRef.current.onerror = (error) => {
+                console.log("Browser: Direct WebSocket error:", error);
+            };
+            
+            voiceWebSocketRef.current.onclose = () => {
+                console.log("Browser: Direct WebSocket closed");
+            };
+        } else if (voiceWebSocketRef.current) {
+            console.log("Browser: Closing direct WebSocket connection");
+            voiceWebSocketRef.current.close();
+            voiceWebSocketRef.current = null;
+        }
+
+        return () => {
+            if (voiceWebSocketRef.current) {
+                voiceWebSocketRef.current.close();
+                voiceWebSocketRef.current = null;
+            }
+        };
+    }, [micActive, currentConvId]);
 
     // Start/stop microphone based on micActive state
     useEffect(() => {
         const mic = micRef.current;
         if (!mic) return;
         if (micActive) {
+            console.log("Browser: Starting microphone...");
             void mic.start();
         } else {
+            console.log("Browser: Stopping microphone...");
             void mic.stop();
         }
         return () => {

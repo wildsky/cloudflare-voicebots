@@ -1,7 +1,7 @@
 import {
     type Schedule,
-} from "agents-sdk";
-import { AIChatAgent } from "agents-sdk/ai-chat-agent";
+} from "agents";
+import { AIChatAgent } from "agents/ai-chat-agent";
 import {
     createDataStreamResponse,
     generateId,
@@ -23,14 +23,6 @@ import type { Connection, ConnectionContext, WSMessage } from "partyserver";
 export class Chat extends AIChatAgent<Env> {
     async onStart() {
         logger.debug("Chat agent started");
-    }
-    
-    async onConnect(connection: Connection, ctx: ConnectionContext) {
-        logger.debug("Chat agent connected", { connection });
-        // Check the request at ctx.request
-        // Authenticate the client
-        // Give them the OK.
-        connection.accept();
     }
   
     /**

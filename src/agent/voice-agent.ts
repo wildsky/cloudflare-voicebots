@@ -1,7 +1,7 @@
 import {
     type Schedule,
-} from "agents-sdk";
-import { AIChatAgent } from "agents-sdk/ai-chat-agent";
+} from "agents";
+import { AIChatAgent } from "agents/ai-chat-agent";
 import {
     createDataStreamResponse,
     generateId,
@@ -37,6 +37,24 @@ export class VoiceAgent extends AIChatAgent<Env> {
     private transcriptAccumulator: TextUIPart[] = [];
     private currentAbortController?: AbortController;
 
+
+    async onRequest(request: Request) {
+        logger.debug("VoiceAgent received HTTP request", { request });
+        
+        const url = new URL(request.url);
+        
+        // Handle get-messages requests
+        if (url.pathname.endsWith('/get-messages')) {
+            if (request.method === 'GET') {
+                return new Response(JSON.stringify(this.messages), {
+                    headers: { 'Content-Type': 'application/json' }
+                });
+            }
+        }
+        
+        // Delegate other requests to parent
+        return new Response('Not implemented', { status: 501 });
+    }
 
     async onStart() {
         logger.debug("VoiceAgent agent started");
@@ -83,10 +101,7 @@ export class VoiceAgent extends AIChatAgent<Env> {
         logger.debug("VoiceAgent agent connected", { connection });
 
         this.connection = connection;
-        // Check the request at ctx.request
-        // Authenticate the client
-        // Give them the OK.
-        connection.accept();
+        // Don't call connection.accept() - parent class handles this with hibernation
     }
 
     async handleTranscript(transcript: { text: string; isFinal: boolean }) {
@@ -123,27 +138,27 @@ export class VoiceAgent extends AIChatAgent<Env> {
 
     async onNewGeneratedChunk(event: { chunk: TextStreamPart<any> }) {
         const { chunk } = event;
-        // if (chunk.type == "text-delta") {
-        //     // Send the text delta to the TTS service
-        //     // Determine wether to flush based on if the sentence is complete.
-        //     // Check if the end of the sentence is reached by comparing the last character with the delimiters
-        //     const isEndOfSentence = full_sentence_delimiters.includes(chunk.textDelta[chunk.textDelta.length - 1]);
-        //     const isEndOfParagraph = sentence_fragment_delimiters.includes(chunk.textDelta[chunk.textDelta.length - 1]);
-        //     const flush = isEndOfSentence || isEndOfParagraph;
-        //     // If there are special characters, we need to remove them
-        //     logger.debug("Sending text delta to TTS service", { chunk, flush });
-        //     this.tts?.sendText(chunk.textDelta, flush);
-        // } else if (chunk.type == "finish") {
-        //     logger.debug("Received finish event from AI", { chunk });
-        //     this.tts?.sendText(" ", true);
-        // }
+        if (chunk.type == "text-delta") {
+            // Send the text delta to the TTS service
+            // Determine wether to flush based on if the sentence is complete.
+            // Check if the end of the sentence is reached by comparing the last character with the delimiters
+            const isEndOfSentence = full_sentence_delimiters.includes(chunk.textDelta[chunk.textDelta.length - 1]);
+            const isEndOfParagraph = sentence_fragment_delimiters.includes(chunk.textDelta[chunk.textDelta.length - 1]);
+            const flush = isEndOfSentence || isEndOfParagraph;
+            // If there are special characters, we need to remove them
+            logger.debug("Sending text delta to TTS service", { chunk, flush });
+            this.tts?.sendText(chunk.textDelta, flush);
+        } else if (chunk.type == "finish") {
+            logger.debug("Received finish event from AI", { chunk });
+            this.tts?.sendText(" ", true);
+        }
     }
 
     // // Called for each message received on the WebSocket connection
     async onMessage(connection: Connection, message: WSMessage) {
         // If the message is an audio chunk, process it with the STT service
         if (message instanceof ArrayBuffer) {
-            // logger.debug(`Received audio chunk from client ID: ${connection.id}`);
+            logger.debug(`Received audio chunk from client ID: ${connection.id}, size: ${message.byteLength} bytes`);
             await this.stt?.sendAudioChunk(message);
             return;
         }
