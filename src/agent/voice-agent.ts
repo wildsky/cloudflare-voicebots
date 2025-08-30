@@ -23,8 +23,7 @@ import type { Connection, ConnectionContext, WSMessage } from "partyserver";
 import { DeepgramStt, type SpeechToTextService } from "@/services/stt";
 import type { TextUIPart } from "@ai-sdk/ui-utils";
 import type { TextToSpeechService } from "@/services/tts/tts";
-import { ElevenLabsTTS } from "@/services/tts/elevenlabs";
-import { LmntTTS } from "@/services/tts/lmnt";
+import { InworldTTS } from "@/services/tts/inworld-tts";
 import { createWriteStream } from "fs";
 
 const sentence_fragment_delimiters: string = ".?!;:,\n…)]}。-";
@@ -36,6 +35,7 @@ export class VoiceAgent extends AIChatAgent<Env> {
     private tts?: TextToSpeechService;
     private transcriptAccumulator: TextUIPart[] = [];
     private currentAbortController?: AbortController;
+    private textBuffer: string = "";
 
 
     async onRequest(request: Request) {
@@ -70,12 +70,17 @@ export class VoiceAgent extends AIChatAgent<Env> {
 
         logger.debug("STT service connected");
 
-        this.tts = new ElevenLabsTTS({
-            apiKey: this.env.ELEVENLABS_API_KEY,
-            voiceId: '21m00Tcm4TlvDq8ikWAM',
-            modelId: 'eleven_flash_v2_5',
-            optimizeLatency: 4
+        this.tts = new InworldTTS({
+            apiKey: this.env.INWORLD_API_KEY,
+            voiceId: 'Hades',
+            modelId: 'inworld-tts-1'
         });
+        
+
+        logger.debug("Connecting to TTS service");
+        await this.tts.connect();
+        logger.debug("TTS service connected");
+
         this.tts.onAudio((audioChunk) => {
             // For TTS, we want to forward 'audioChunk' back to the client
             if (this.connection) {
@@ -139,18 +144,24 @@ export class VoiceAgent extends AIChatAgent<Env> {
     async onNewGeneratedChunk(event: { chunk: TextStreamPart<any> }) {
         const { chunk } = event;
         if (chunk.type == "text-delta") {
-            // Send the text delta to the TTS service
-            // Determine wether to flush based on if the sentence is complete.
-            // Check if the end of the sentence is reached by comparing the last character with the delimiters
+            // Accumulate text in buffer
+            this.textBuffer += chunk.textDelta;
+            
             const isEndOfSentence = full_sentence_delimiters.includes(chunk.textDelta[chunk.textDelta.length - 1]);
-            const isEndOfParagraph = sentence_fragment_delimiters.includes(chunk.textDelta[chunk.textDelta.length - 1]);
-            const flush = isEndOfSentence || isEndOfParagraph;
-            // If there are special characters, we need to remove them
-            logger.debug("Sending text delta to TTS service", { chunk, flush });
-            this.tts?.sendText(chunk.textDelta, flush);
+            
+            if (isEndOfSentence) {
+                // Send complete sentence to TTS
+                logger.debug("Sending complete sentence to TTS service", { text: this.textBuffer });
+                this.tts?.sendText(this.textBuffer.trim(), true);
+                this.textBuffer = ""; // Clear buffer
+            }
         } else if (chunk.type == "finish") {
-            logger.debug("Received finish event from AI", { chunk });
-            this.tts?.sendText(" ", true);
+            // Send any remaining text
+            if (this.textBuffer.trim()) {
+                logger.debug("Sending final text to TTS service", { text: this.textBuffer });
+                this.tts?.sendText(this.textBuffer.trim(), true);
+                this.textBuffer = "";
+            }
         }
     }
 

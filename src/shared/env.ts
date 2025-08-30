@@ -7,6 +7,8 @@ export type Env = {
   DEEPGRAM_API_KEY: string;
   ELEVENLABS_API_KEY: string;
   LMNT_API_KEY: string;
+  INWORLD_API_KEY: string;
+  INWORLD_WORKSPACE_ID: string;
 
   Chat: AgentNamespace<Chat>;
   voicechat: AgentNamespace<VoiceAgent>;

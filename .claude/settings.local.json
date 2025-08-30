@@ -13,7 +13,12 @@
       "Read(/tmp/agents-starter/src/**)",
       "Read(/tmp/agents-starter/**)",
       "Bash(npm uninstall:*)",
-      "Bash(npm install:*)"
+      "Bash(npm install:*)",
+      "WebFetch(domain:platform.inworld.ai)",
+      "WebFetch(domain:docs.inworld.ai)",
+      "WebFetch(domain:github.com)",
+      "Bash(npm run build:*)",
+      "Bash(npm run:*)"
     ],
     "deny": [],
     "ask": []
