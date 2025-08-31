@@ -61,8 +61,8 @@ export class InworldTTS extends TextToSpeechService {
           name: this.voiceId,
         },
         audioConfig: {
-          audioEncoding: "LINEAR16",
-          sampleRateHertz: 16000,
+          audioEncoding: "MULAW",
+          sampleRateHertz: 8000,
         },
       };
       
@@ -113,16 +113,15 @@ export class InworldTTS extends TextToSpeechService {
         // Handle the response format from API
         const audioContent = data.result?.audioContent || data.audioContent;
         if (audioContent) {
-          // Decode base64 audio 
+          // Decode base64 audio (WAV file with μ-law data from Inworld)
           const binaryString = atob(audioContent);
-          const pcmBytes = new Uint8Array(binaryString.length);
+          const wavBytes = new Uint8Array(binaryString.length);
           for (let i = 0; i < binaryString.length; i++) {
-            pcmBytes[i] = binaryString.charCodeAt(i);
+            wavBytes[i] = binaryString.charCodeAt(i);
           }
           
-          // Downsample from 16kHz to 8kHz, then convert to μ-law
-          const downsampledPcm = this.downsample16to8(pcmBytes);
-          const mulawBytes = this.convertLinear16ToMulaw(downsampledPcm);
+          // Extract μ-law data from WAV file
+          const mulawBytes = this.extractMulawFromWav(wavBytes);
           const audioBuffer = mulawBytes.buffer;
 
           logger.debug("Received audio chunk from Inworld TTS", {
@@ -159,79 +158,43 @@ export class InworldTTS extends TextToSpeechService {
   }
 
   /**
-   * Downsample from 16kHz to 8kHz by taking every other sample
+   * Extract μ-law audio data from WAV file
    */
-  private downsample16to8(pcmBytes: Uint8Array): Uint8Array {
-    // Simple downsampling: take every other sample (16kHz -> 8kHz)
-    const outputSize = pcmBytes.length / 2;
-    const downsampled = new Uint8Array(outputSize);
+  private extractMulawFromWav(wavBytes: Uint8Array): Uint8Array {
+    // WAV file structure:
+    // - RIFF header (12 bytes): "RIFF" + filesize + "WAVE"
+    // - fmt chunk: describes audio format 
+    // - data chunk: contains the actual audio data
     
-    for (let i = 0; i < outputSize; i += 2) {
-      // Take every other 16-bit sample (skip one)
-      downsampled[i] = pcmBytes[i * 2];
-      downsampled[i + 1] = pcmBytes[i * 2 + 1];
-    }
-    
-    return downsampled;
-  }
-
-  /**
-   * Convert LINEAR16 PCM to μ-law encoding for Twilio
-   * Simple conversion - assumes 8kHz 16-bit signed PCM input
-   */
-  private convertLinear16ToMulaw(pcmBytes: Uint8Array): Uint8Array {
-    // LINEAR16 is 16-bit samples (2 bytes per sample)
-    const samples = pcmBytes.length / 2;
-    const mulawBytes = new Uint8Array(samples);
-    
-    for (let i = 0; i < samples; i++) {
-      // Read 16-bit signed sample (try both endianness)
-      const sampleLE = (pcmBytes[i * 2 + 1] << 8) | pcmBytes[i * 2]; // little-endian
-      const sampleBE = (pcmBytes[i * 2] << 8) | pcmBytes[i * 2 + 1]; // big-endian
-      
-      // Convert unsigned to signed (assuming little-endian first)
-      let signedSample = sampleLE > 32767 ? sampleLE - 65536 : sampleLE;
-      
-      // Convert to μ-law
-      let mulaw = this.linearToMulaw(signedSample);
-      mulawBytes[i] = mulaw;
-    }
-    
-    return mulawBytes;
-  }
-
-  /**
-   * Convert a linear 16-bit sample to μ-law
-   * Standard ITU-T G.711 μ-law encoding
-   */
-  private linearToMulaw(sample: number): number {
-    const BIAS = 0x84;
-    const CLIP = 8159;
-    
-    // Get the sign and make sample positive
-    const sign = (sample >> 8) & 0x80;
-    if (sign !== 0) sample = -sample;
-    
-    // Clip the sample
-    if (sample > CLIP) sample = CLIP;
-    
-    // Add bias
-    sample += BIAS;
-    
-    // Find the exponent and mantissa
-    let exponent = 7;
-    for (let exp = 0; exp < 8; exp++) {
-      if (sample <= (0xFF << exp)) {
-        exponent = exp;
-        break;
+    try {
+      // Find the "data" chunk
+      let dataStart = -1;
+      for (let i = 0; i < wavBytes.length - 4; i++) {
+        if (wavBytes[i] === 0x64 && wavBytes[i+1] === 0x61 && 
+            wavBytes[i+2] === 0x74 && wavBytes[i+3] === 0x61) { // "data"
+          dataStart = i + 8; // Skip "data" + 4-byte size
+          break;
+        }
       }
+      
+      if (dataStart === -1) {
+        logger.error("Could not find data chunk in WAV file");
+        return new Uint8Array(0);
+      }
+      
+      // Extract audio data (everything after the data chunk header)
+      const audioData = wavBytes.slice(dataStart);
+      
+      logger.debug("Extracted μ-law from WAV", {
+        originalSize: wavBytes.length,
+        extractedSize: audioData.length,
+        dataStartIndex: dataStart
+      });
+      
+      return audioData;
+    } catch (error) {
+      logger.error("Error extracting μ-law from WAV", error);
+      return new Uint8Array(0);
     }
-    
-    const mantissa = (sample >> (exponent + 3)) & 0x0F;
-    
-    // Create the μ-law byte
-    const mulaw = ~(sign | (exponent << 4) | mantissa);
-    
-    return mulaw & 0xFF;
   }
 }

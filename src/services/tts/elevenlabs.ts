@@ -24,7 +24,7 @@ export class ElevenLabsTTS extends TextToSpeechService {
     this.options = {
       modelId: "eleven_flash_v2_5", // Default to Flash model for lowest latency
       optimizeLatency: 3, // Max optimization for speed
-      // outputFormat: 'pcm_16000',
+      outputFormat: 'pcm_16000',
       ...options,
     };
   }
@@ -35,7 +35,7 @@ export class ElevenLabsTTS extends TextToSpeechService {
     }
 
     return new Promise((resolve, reject) => {
-      const url = `wss://api.elevenlabs.io/v1/text-to-speech/${this.options.voiceId}/stream-input?optimize_streaming_latency=${this.options.optimizeLatency}&model_id=${this.options.modelId}`;
+      const url = `wss://api.elevenlabs.io/v1/text-to-speech/${this.options.voiceId}/stream-input?optimize_streaming_latency=${this.options.optimizeLatency}&model_id=${this.options.modelId}&output_format=${this.options.outputFormat}`;
       logger.info("Connecting to ElevenLabs WebSocket:", url);
       try {
         this.ws = new WebSocket(url);
@@ -90,8 +90,14 @@ export class ElevenLabsTTS extends TextToSpeechService {
         }
         if (audio) {
           const audioBuffer = Buffer.from(audio, "base64");
+          
+          // Convert PCM to μ-law for Twilio compatibility
+          const pcmBytes = new Uint8Array(audioBuffer);
+          const downsampledPcm = this.downsample16to8(pcmBytes);
+          const mulawBytes = this.convertLinear16ToMulaw(downsampledPcm);
+          
           for (const callback of this.audioCallbacks) {
-            callback(audioBuffer.buffer);
+            callback(mulawBytes.buffer);
           }
         }
       };
@@ -187,5 +193,64 @@ export class ElevenLabsTTS extends TextToSpeechService {
       };
       this.ws.send(JSON.stringify(interruptMessage));
     }
+  }
+
+  /**
+   * Downsample from 16kHz to 8kHz by taking every other sample
+   */
+  private downsample16to8(pcmBytes: Uint8Array): Uint8Array {
+    const outputSize = pcmBytes.length / 2;
+    const downsampled = new Uint8Array(outputSize);
+    
+    for (let i = 0; i < outputSize; i += 2) {
+      downsampled[i] = pcmBytes[i * 2];
+      downsampled[i + 1] = pcmBytes[i * 2 + 1];
+    }
+    
+    return downsampled;
+  }
+
+  /**
+   * Convert LINEAR16 PCM to μ-law encoding for Twilio
+   */
+  private convertLinear16ToMulaw(pcmBytes: Uint8Array): Uint8Array {
+    const samples = pcmBytes.length / 2;
+    const mulawBytes = new Uint8Array(samples);
+    
+    for (let i = 0; i < samples; i++) {
+      const sampleLE = (pcmBytes[i * 2 + 1] << 8) | pcmBytes[i * 2];
+      let signedSample = sampleLE > 32767 ? sampleLE - 65536 : sampleLE;
+      let mulaw = this.linearToMulaw(signedSample);
+      mulawBytes[i] = mulaw;
+    }
+    
+    return mulawBytes;
+  }
+
+  /**
+   * Convert a linear 16-bit sample to μ-law
+   */
+  private linearToMulaw(sample: number): number {
+    const BIAS = 0x84;
+    const CLIP = 8159;
+    
+    const sign = (sample >> 8) & 0x80;
+    if (sign !== 0) sample = -sample;
+    
+    if (sample > CLIP) sample = CLIP;
+    sample += BIAS;
+    
+    let exponent = 7;
+    for (let exp = 0; exp < 8; exp++) {
+      if (sample <= (0xFF << exp)) {
+        exponent = exp;
+        break;
+      }
+    }
+    
+    const mantissa = (sample >> (exponent + 3)) & 0x0F;
+    const mulaw = ~(sign | (exponent << 4) | mantissa);
+    
+    return mulaw & 0xFF;
   }
 }

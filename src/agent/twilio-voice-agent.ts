@@ -25,16 +25,24 @@ export class TwilioVoiceAgent extends VoiceAgent {
     // Override TTS audio callback for Twilio support
     if (this.tts) {
       this.tts.onAudio((audioChunk) => {
-        logger.debug("TTS audio callback triggered", {
+        logger.info("TTS audio callback triggered", {
           hasStreamSid: !!this.currentStreamSid,
           hasTwilioConnection: !!this.twilioConnection,
-          audioSize: audioChunk.byteLength || audioChunk.length
+          audioSize: audioChunk.byteLength || audioChunk.length,
+          streamSid: this.currentStreamSid,
+          connectionId: this.twilioConnection?.id,
+          audioHeader: Array.from(new Uint8Array(audioChunk.slice(0, 10))).map(b => String.fromCharCode(b)).join('')
         });
         
         if (this.currentStreamSid && this.twilioConnection) {
           // Send to Twilio instead of browser
+          logger.info("Routing audio to Twilio");
           this.sendAudioToTwilio(audioChunk);
         } else {
+          logger.warn("Missing StreamSid or Twilio connection, falling back to browser audio", {
+            hasStreamSid: !!this.currentStreamSid,
+            hasTwilioConnection: !!this.twilioConnection
+          });
           // Fall back to browser audio (original behavior)
           if (this.connection) {
             const base64Audio = btoa(
@@ -194,6 +202,22 @@ export class TwilioVoiceAgent extends VoiceAgent {
     } else {
       logger.warn("WebSocket connected without callSid parameter");
     }
+
+    // If we have both WebSocket connection and StreamSid, send greeting
+    if (this.currentStreamSid && this.tts) {
+      logger.info("WebSocket connected, sending greeting now", {
+        streamSid: this.currentStreamSid,
+        hasTTS: !!this.tts,
+        ttsType: this.tts?.constructor?.name,
+      });
+      
+      try {
+        await this.tts.sendText("Hello! I'm Kaylee. How can I help you today?", true);
+        logger.info("Greeting sent to TTS successfully");
+      } catch (error) {
+        logger.error("Error sending greeting to TTS", error);
+      }
+    }
   }
 
   async onMessage(connection: Connection, message: WSMessage) {
@@ -222,25 +246,15 @@ export class TwilioVoiceAgent extends VoiceAgent {
             callSid,
           });
           this.currentStreamSid = streamSid;
+          logger.info("StreamSid set to", this.currentStreamSid);
           
-          // Send initial greeting to the caller
-          logger.info("Sending greeting to TTS", { 
+          // Don't send greeting immediately - wait for WebSocket connection
+          logger.info("Stream started, waiting for WebSocket connection", { 
             hasTTS: !!this.tts,
             streamSid: this.currentStreamSid,
             hasConnection: !!this.twilioConnection,
             ttsType: this.tts?.constructor?.name,
           });
-          
-          if (this.tts) {
-            try {
-              await this.tts.sendText("Hello! I'm Kaylee. How can I help you today?", true);
-              logger.info("Greeting sent to TTS successfully");
-            } catch (error) {
-              logger.error("Error sending greeting to TTS", error);
-            }
-          } else {
-            logger.error("TTS service not initialized");
-          }
           
           return;
         }

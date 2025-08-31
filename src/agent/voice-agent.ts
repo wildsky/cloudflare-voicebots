@@ -22,6 +22,7 @@ import { DeepgramStt, type SpeechToTextService } from "@/services/stt";
 import type { TextUIPart } from "@ai-sdk/ui-utils";
 import type { TextToSpeechService } from "@/services/tts/tts";
 import { InworldTTS } from "@/services/tts/inworld-tts";
+import { ElevenLabsTTS } from "@/services/tts/elevenlabs";
 import { createWriteStream } from "fs";
 import { initializeDatabaseTools } from "@/tools/database";
 
@@ -72,10 +73,19 @@ export class VoiceAgent extends AIChatAgent<Env> {
 
     logger.debug("STT service connected");
 
-    this.tts = new InworldTTS({
-      apiKey: this.env.INWORLD_API_KEY,
-      voiceId: "Elizabeth",
-      modelId: "inworld-tts-1",
+    // Choose TTS service - uncomment the one you want to use
+    // this.tts = new InworldTTS({
+    //   apiKey: this.env.INWORLD_API_KEY,
+    //   voiceId: "Elizabeth",
+    //   modelId: "inworld-tts-1",
+    // });
+    
+    this.tts = new ElevenLabsTTS({
+      apiKey: this.env.ELEVENLABS_API_KEY,
+      voiceId: "21m00Tcm4TlvDq8ikWAM", // Rachel - clear female voice
+      modelId: "eleven_flash_v2_5",
+      optimizeLatency: 3,
+      outputFormat: "pcm_16000", // Request PCM format for easier conversion
     });
 
     logger.debug("Connecting to TTS service");
