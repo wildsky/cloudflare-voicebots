@@ -20,23 +20,26 @@ export const findUserByPhone = tool({
     if (!dbService) {
       throw new Error("Database service not initialized");
     }
-    
+
     try {
       const user = await dbService.getUserByPhone(phone);
       if (!user) {
-        return { success: false, message: "No user found with that phone number" };
+        return {
+          success: false,
+          message: "No user found with that phone number",
+        };
       }
-      
+
       return {
         success: true,
         user: {
-          name: `${user.fName || ''} ${user.lName || ''}`.trim(),
+          name: `${user.fName || ""} ${user.lName || ""}`.trim(),
           phone: user.phone,
           biography: user.biography,
           temperature: user.temperature,
           relationship: user.primaryUserRelationship,
-          dateAdded: user.dateAdded
-        }
+          dateAdded: user.dateAdded,
+        },
       };
     } catch (error) {
       logger.error("Error in findUserByPhone tool", { phone, error });
@@ -55,26 +58,30 @@ export const findUserByName = tool({
     if (!dbService) {
       throw new Error("Database service not initialized");
     }
-    
+
     try {
       const users = await dbService.getUserByName(firstName, lastName);
       if (users.length === 0) {
         return { success: false, message: "No users found with that name" };
       }
-      
+
       return {
         success: true,
-        users: users.map(user => ({
-          name: `${user.fName || ''} ${user.lName || ''}`.trim(),
+        users: users.map((user) => ({
+          name: `${user.fName || ""} ${user.lName || ""}`.trim(),
           phone: user.phone,
           biography: user.biography,
           temperature: user.temperature,
           relationship: user.primaryUserRelationship,
-          dateAdded: user.dateAdded
-        }))
+          dateAdded: user.dateAdded,
+        })),
       };
     } catch (error) {
-      logger.error("Error in findUserByName tool", { firstName, lastName, error });
+      logger.error("Error in findUserByName tool", {
+        firstName,
+        lastName,
+        error,
+      });
       return { success: false, message: "Error searching for users" };
     }
   },
@@ -89,25 +96,25 @@ export const getUserProfile = tool({
     if (!dbService) {
       throw new Error("Database service not initialized");
     }
-    
+
     try {
       const user = await dbService.getUserByGuid(guid);
       if (!user) {
         return { success: false, message: "No user found with that ID" };
       }
-      
+
       return {
         success: true,
         profile: {
           id: user.guid,
-          name: `${user.fName || ''} ${user.lName || ''}`.trim(),
+          name: `${user.fName || ""} ${user.lName || ""}`.trim(),
           phone: user.phone,
           biography: user.biography,
           temperature: user.temperature,
           primaryUser: user.primaryUserID,
           relationship: user.primaryUserRelationship,
-          memberSince: user.dateAdded
-        }
+          memberSince: user.dateAdded,
+        },
       };
     } catch (error) {
       logger.error("Error in getUserProfile tool", { guid, error });
@@ -117,27 +124,43 @@ export const getUserProfile = tool({
 });
 
 export const updateUserInfo = tool({
-  description: "Update user information like biography, name, or AI temperature preference",
+  description:
+    "Update user information like biography, name, or AI temperature preference",
   parameters: z.object({
     guid: z.string().describe("The user's unique GUID identifier"),
     firstName: z.string().optional().describe("Updated first name"),
     lastName: z.string().optional().describe("Updated last name"),
     biography: z.string().optional().describe("Updated biography/description"),
-    temperature: z.number().min(0).max(1).optional().describe("AI temperature preference (0-1)"),
-    relationship: z.string().optional().describe("Relationship to primary user"),
+    temperature: z
+      .number()
+      .min(0)
+      .max(1)
+      .optional()
+      .describe("AI temperature preference (0-1)"),
+    relationship: z
+      .string()
+      .optional()
+      .describe("Relationship to primary user"),
   }),
-  execute: async ({ guid, firstName, lastName, biography, temperature, relationship }) => {
+  execute: async ({
+    guid,
+    firstName,
+    lastName,
+    biography,
+    temperature,
+    relationship,
+  }) => {
     if (!dbService) {
       throw new Error("Database service not initialized");
     }
-    
+
     try {
       // First get the existing user
       const existingUser = await dbService.getUserByGuid(guid);
       if (!existingUser) {
         return { success: false, message: "No user found with that ID" };
       }
-      
+
       // Update with new values
       const updatedUser = {
         ...existingUser,
@@ -145,11 +168,12 @@ export const updateUserInfo = tool({
         lName: lastName ?? existingUser.lName,
         biography: biography ?? existingUser.biography,
         temperature: temperature ?? existingUser.temperature,
-        primaryUserRelationship: relationship ?? existingUser.primaryUserRelationship,
+        primaryUserRelationship:
+          relationship ?? existingUser.primaryUserRelationship,
       };
-      
+
       await dbService.upsertUser(updatedUser);
-      
+
       return {
         success: true,
         message: "User information updated successfully",
@@ -159,7 +183,7 @@ export const updateUserInfo = tool({
           ...(biography && { biography }),
           ...(temperature && { temperature }),
           ...(relationship && { relationship }),
-        }
+        },
       };
     } catch (error) {
       logger.error("Error in updateUserInfo tool", { guid, error });
@@ -169,27 +193,33 @@ export const updateUserInfo = tool({
 });
 
 export const listRecentUsers = tool({
-  description: "Get a list of recent users (useful for admin/overview purposes)",
+  description:
+    "Get a list of recent users (useful for admin/overview purposes)",
   parameters: z.object({
-    limit: z.number().min(1).max(100).default(10).describe("Maximum number of users to return"),
+    limit: z
+      .number()
+      .min(1)
+      .max(100)
+      .default(10)
+      .describe("Maximum number of users to return"),
   }),
   execute: async ({ limit }) => {
     if (!dbService) {
       throw new Error("Database service not initialized");
     }
-    
+
     try {
       const users = await dbService.getUsers(limit);
-      
+
       return {
         success: true,
-        users: users.map(user => ({
+        users: users.map((user) => ({
           id: user.guid,
-          name: `${user.fName || ''} ${user.lName || ''}`.trim(),
+          name: `${user.fName || ""} ${user.lName || ""}`.trim(),
           phone: user.phone,
           relationship: user.primaryUserRelationship,
-          dateAdded: user.dateAdded
-        }))
+          dateAdded: user.dateAdded,
+        })),
       };
     } catch (error) {
       logger.error("Error in listRecentUsers tool", { limit, error });

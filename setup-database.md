@@ -11,6 +11,7 @@ npx wrangler d1 create voicebot-users
 ```
 
 This will output something like:
+
 ```
 ✅ Successfully created DB 'voicebot-users' in region UNKNOWN
 Created your database using D1's new storage backend!
@@ -49,8 +50,8 @@ To add some test data, you can run:
 
 ```bash
 npx wrangler d1 execute voicebot-users --command="
-INSERT INTO users (guid, phone, fName, lName, biography, temperature) 
-VALUES 
+INSERT INTO users (guid, phone, fName, lName, biography, temperature)
+VALUES
   ('user-123', 5551234567, 'John', 'Doe', 'Software developer who loves AI', 0.7),
   ('user-456', 5559876543, 'Jane', 'Smith', 'Designer and voice interface enthusiast', 0.8);
 "
@@ -69,7 +70,7 @@ npm run deploy
 The voice agent now has access to these database tools:
 
 - **findUserByPhone**: Find a user by their phone number
-- **findUserByName**: Find users by first name, last name, or both  
+- **findUserByName**: Find users by first name, last name, or both
 - **getUserProfile**: Get detailed profile information by user GUID
 - **updateUserInfo**: Update user information like biography, name, or AI temperature
 - **listRecentUsers**: Get a list of recent users
@@ -77,8 +78,9 @@ The voice agent now has access to these database tools:
 ## Example Voice Commands
 
 Once set up, users can ask things like:
+
 - "Do you know anything about me?"
-- "What's my temperature setting?"  
+- "What's my temperature setting?"
 - "Update my biography to say I'm a musician"
 - "Find the user named John"
 - "Who are the recent users?"

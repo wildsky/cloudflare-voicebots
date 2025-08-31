@@ -1,4 +1,4 @@
-/* 
+/*
  * A colorful logger that includes the caller’s file, line number, and function.
  */
 
@@ -8,8 +8,8 @@ const BRIGHT = "\x1b[1m";
 /** ANSI color codes for different log levels */
 enum LogColors {
   DEBUG = "\x1b[34m", // Blue
-  INFO = "\x1b[32m",  // Green
-  WARN = "\x1b[33m",  // Yellow
+  INFO = "\x1b[32m", // Green
+  WARN = "\x1b[33m", // Yellow
   ERROR = "\x1b[31m", // Red
   FATAL = "\x1b[35m", // Magenta
 }
@@ -44,8 +44,8 @@ export class SimpleLogger {
     this.showFileAndLine = options.showFileAndLine ?? true;
   }
 
-  /** 
-   * Retrieves details about the caller from the stack trace 
+  /**
+   * Retrieves details about the caller from the stack trace
    * so we can log file:line and function/class name.
    */
   private getCallerDetails(): {
@@ -61,7 +61,7 @@ export class SimpleLogger {
     //    at SomeOtherClass.someMethod (someFile.ts:aa:bb)
     //
     // We'll parse the 3rd or 4th line to figure out the real caller.
-    
+
     const stack = error.stack?.split("\n") ?? [];
     // The 0th line is "Error"
     // The 1st line is "    at FancyLogger.getCallerDetails (FancyLogger.ts:xx:yy)"
@@ -81,13 +81,24 @@ export class SimpleLogger {
 
   /** Returns whether a log level should be printed based on minLevel setting */
   private shouldLog(level: LogLevel): boolean {
-    const levels = [LogLevel.DEBUG, LogLevel.INFO, LogLevel.WARN, LogLevel.ERROR, LogLevel.FATAL];
+    const levels = [
+      LogLevel.DEBUG,
+      LogLevel.INFO,
+      LogLevel.WARN,
+      LogLevel.ERROR,
+      LogLevel.FATAL,
+    ];
     const currentIndex = levels.indexOf(level);
     const minIndex = levels.indexOf(this.minLevel);
     return currentIndex >= minIndex;
   }
 
-  private log(level: LogLevel, color: string, message: unknown, ...args: unknown[]) {
+  private log(
+    level: LogLevel,
+    color: string,
+    message: unknown,
+    ...args: unknown[]
+  ) {
     if (!this.shouldLog(level)) return;
 
     const { functionName, fileAndLine } = this.getCallerDetails();
@@ -120,19 +131,19 @@ export class SimpleLogger {
   debug(message: unknown, ...args: unknown[]): void {
     this.log(LogLevel.DEBUG, LogColors.DEBUG, message, ...args);
   }
-  
+
   info(message: unknown, ...args: unknown[]): void {
     this.log(LogLevel.INFO, LogColors.INFO, message, ...args);
   }
-  
+
   warn(message: unknown, ...args: unknown[]): void {
     this.log(LogLevel.WARN, LogColors.WARN, message, ...args);
   }
-  
+
   error(message: unknown, ...args: unknown[]): void {
     this.log(LogLevel.ERROR, LogColors.ERROR, message, ...args);
   }
-  
+
   fatal(message: unknown, ...args: unknown[]): void {
     this.log(LogLevel.FATAL, LogColors.FATAL, message, ...args);
   }

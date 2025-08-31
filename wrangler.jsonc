@@ -3,51 +3,52 @@
   "name": "cloudflare-voicebots",
   "main": "src/server.ts",
   "compatibility_date": "2025-02-04",
-  "compatibility_flags": [
-    "nodejs_compat"
-  ],
+  "compatibility_flags": ["nodejs_compat"],
   "assets": {
-    "directory": "public"
+    "directory": "public",
   },
   "durable_objects": {
     "bindings": [
       {
         "name": "Chat",
-        "class_name": "Chat"
+        "class_name": "Chat",
       },
       {
         "name": "voicechat",
-        "class_name": "VoiceAgent"
+        "class_name": "VoiceAgent",
       },
       {
-        "name": "CONVERSATION", 
-        "class_name": "ConversationDO"
-      }
-    ]
+        "name": "twiliovoice",
+        "class_name": "TwilioVoiceAgent",
+      },
+      {
+        "name": "CONVERSATION",
+        "class_name": "ConversationDO",
+      },
+    ],
   },
   "migrations": [
     {
       "tag": "v1",
-      "new_sqlite_classes": [
-        "VoiceAgent",
-        "ConversationDO"
-      ]
+      "new_sqlite_classes": ["VoiceAgent", "ConversationDO"],
     },
     {
       "tag": "v2",
-      "new_sqlite_classes": [
-        "Chat"
-      ]
-    }
+      "new_sqlite_classes": ["Chat"],
+    },
+    {
+      "tag": "v3",
+      "new_sqlite_classes": ["TwilioVoiceAgent"],
+    },
   ],
   "observability": {
-    "enabled": true
+    "enabled": true,
   },
   "d1_databases": [
     {
       "binding": "USER_DB",
       "database_name": "voicebot-users",
-      "database_id": "23778517-6912-4320-a795-99ed29251c3b"
-    }
-  ]
+      "database_id": "23778517-6912-4320-a795-99ed29251c3b",
+    },
+  ],
 }

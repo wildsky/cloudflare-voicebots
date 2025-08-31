@@ -16,7 +16,7 @@ This is a Cloudflare Workers-based voice chat agent application built with:
 
 - **Framework**: Cloudflare Workers with `agents-sdk` for AI agent functionality
 - **AI Integration**: OpenAI GPT-4 via `@ai-sdk/openai` with streaming responses
-- **Voice Services**: 
+- **Voice Services**:
   - Speech-to-Text: Deepgram SDK (`@deepgram/sdk`)
   - Text-to-Speech: ElevenLabs and LMNT (`lmnt-node`)
 - **Frontend**: React 19 with Vite, TailwindCSS, and Radix UI components
@@ -35,7 +35,7 @@ This is a Cloudflare Workers-based voice chat agent application built with:
 - **Wrangler config**: `wrangler.jsonc` - Defines Durable Object bindings for `Chat` (VoiceAgent) and `CONVERSATION` (ConversationDO)
 - **Required environment variables** (set in `.dev.vars`):
   - `OPENAI_API_KEY`
-  - `DEEPGRAM_API_KEY` 
+  - `DEEPGRAM_API_KEY`
   - `ELEVENLABS_API_KEY`
   - `LMNT_API_KEY`
 

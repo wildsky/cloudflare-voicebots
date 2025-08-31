@@ -30,7 +30,7 @@ export class DatabaseService {
         .prepare("SELECT * FROM users WHERE phone = ?")
         .bind(phone)
         .first<User>();
-      
+
       logger.debug("Found user by phone", { phone, user: result });
       return result || null;
     } catch (error) {
@@ -48,7 +48,7 @@ export class DatabaseService {
         .prepare("SELECT * FROM users WHERE guid = ?")
         .bind(guid)
         .first<User>();
-      
+
       logger.debug("Found user by GUID", { guid, user: result });
       return result || null;
     } catch (error) {
@@ -64,26 +64,34 @@ export class DatabaseService {
     try {
       let query = "SELECT * FROM users WHERE 1=1";
       const params: any[] = [];
-      
+
       if (firstName) {
         query += " AND fName LIKE ?";
         params.push(`%${firstName}%`);
       }
-      
+
       if (lastName) {
         query += " AND lName LIKE ?";
         params.push(`%${lastName}%`);
       }
-      
+
       const result = await this.db
         .prepare(query)
         .bind(...params)
         .all<User>();
-      
-      logger.debug("Found users by name", { firstName, lastName, count: result.results?.length });
+
+      logger.debug("Found users by name", {
+        firstName,
+        lastName,
+        count: result.results?.length,
+      });
       return result.results || [];
     } catch (error) {
-      logger.error("Error finding user by name", { firstName, lastName, error });
+      logger.error("Error finding user by name", {
+        firstName,
+        lastName,
+        error,
+      });
       throw error;
     }
   }
@@ -96,34 +104,50 @@ export class DatabaseService {
       if (user.id) {
         // Update existing user
         await this.db
-          .prepare(`
+          .prepare(
+            `
             UPDATE users 
             SET guid = ?, phone = ?, fName = ?, lName = ?, biography = ?, 
                 primaryUserID = ?, primaryUserRelationship = ?, temperature = ?
             WHERE id = ?
-          `)
+          `
+          )
           .bind(
-            user.guid, user.phone, user.fName, user.lName, user.biography,
-            user.primaryUserID, user.primaryUserRelationship, user.temperature,
+            user.guid,
+            user.phone,
+            user.fName,
+            user.lName,
+            user.biography,
+            user.primaryUserID,
+            user.primaryUserRelationship,
+            user.temperature,
             user.id
           )
           .run();
-        
+
         logger.debug("Updated user", { userId: user.id });
         return user;
       } else {
         // Create new user
         const result = await this.db
-          .prepare(`
+          .prepare(
+            `
             INSERT INTO users (guid, phone, fName, lName, biography, primaryUserID, primaryUserRelationship, temperature)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `)
+          `
+          )
           .bind(
-            user.guid, user.phone, user.fName, user.lName, user.biography,
-            user.primaryUserID, user.primaryUserRelationship, user.temperature || 0.70
+            user.guid,
+            user.phone,
+            user.fName,
+            user.lName,
+            user.biography,
+            user.primaryUserID,
+            user.primaryUserRelationship,
+            user.temperature || 0.7
           )
           .run();
-        
+
         const newUser = { ...user, id: result.meta.last_row_id as number };
         logger.debug("Created new user", { userId: newUser.id });
         return newUser;
@@ -143,7 +167,7 @@ export class DatabaseService {
         .prepare("SELECT * FROM users ORDER BY dateAdded DESC LIMIT ?")
         .bind(limit)
         .all<User>();
-      
+
       logger.debug("Retrieved users", { count: result.results?.length });
       return result.results || [];
     } catch (error) {

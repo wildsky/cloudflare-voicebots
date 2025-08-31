@@ -9,9 +9,16 @@ export type Env = {
   LMNT_API_KEY: string;
   INWORLD_API_KEY: string;
   INWORLD_WORKSPACE_ID: string;
+  TWILIO_ACCOUNT_SID: string;
+  TWILIO_AUTH_TOKEN: string;
+  TWILIO_WEBHOOK_SECRET: string;
+  CLOUDFLARE_WORKERS_URL: string;
 
   Chat: AgentNamespace<Chat>;
   voicechat: AgentNamespace<VoiceAgent>;
-  CONVERSATION: DurableObjectNamespace;  // New binding for conversation persistence
-  USER_DB: D1Database;  // Database for user information
+  twiliovoice: AgentNamespace<
+    import("../agent/twilio-voice-agent").TwilioVoiceAgent
+  >;
+  CONVERSATION: DurableObjectNamespace; // New binding for conversation persistence
+  USER_DB: D1Database; // Database for user information
 };
