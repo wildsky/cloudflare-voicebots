@@ -11,10 +11,13 @@ export { ConversationDO } from "./conversations";
 
 /**
  * The worker entry point, which routes all incoming fetch requests.
- * If the request matches the /agents/... pattern, it’s routed to our Chat agent.
+ * If the request matches the /agents/... pattern, it's routed to our Chat agent.
  */
 export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
+    // FIRST THING: Log that we got ANY request
+    console.log("🚀 WORKER HIT:", request.method, request.url);
+    
     logger.debug("Worker fetch event", { request });
     if (!env.OPENAI_API_KEY) {
       console.error(
@@ -22,6 +25,16 @@ export default {
       );
       return new Response("OPENAI_API_KEY is not set", { status: 500 });
     }
+
+    const url = new URL(request.url);
+    
+    console.log("SERVER: Request received", {
+      method: request.method,
+      pathname: url.pathname,
+      fullUrl: request.url,
+      isWebSocket: request.headers.get('Upgrade') === 'websocket',
+      isTwilioPath: url.pathname.startsWith('/agents/twiliovoice/')
+    });
 
     // If routeAgentRequest can't find a matching Agent route, return 404
     return (

@@ -40,6 +40,30 @@ export class DatabaseService {
   }
 
   /**
+   * Get user data from phone number in From field (for cross-instance access)
+   */
+  async getUserDataFromTwilioNumber(twilioFromNumber: string): Promise<User | null> {
+    try {
+      // Extract the numeric phone number from Twilio format (+15551234567)
+      const numericPhone = parseInt(twilioFromNumber.replace(/[^\d]/g, ''));
+      
+      if (isNaN(numericPhone)) {
+        logger.warn("Invalid phone number format", { twilioFromNumber });
+        return null;
+      }
+
+      return await this.getUserByPhone(numericPhone);
+    } catch (error) {
+      logger.error("Error getting user data from Twilio number", { 
+        twilioFromNumber, 
+        error: error?.message || error?.toString() || 'Unknown error',
+        errorType: error?.constructor?.name || 'Unknown type'
+      });
+      return null;
+    }
+  }
+
+  /**
    * Find user by GUID
    */
   async getUserByGuid(guid: string): Promise<User | null> {

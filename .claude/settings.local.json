@@ -22,7 +22,10 @@
       "Bash(npx wrangler d1 create:*)",
       "Bash(npx wrangler d1 execute:*)",
       "Bash(npx tsc:*)",
-      "WebFetch(domain:www.twilio.com)"
+      "WebFetch(domain:www.twilio.com)",
+      "WebFetch(domain:developers.cloudflare.com)",
+      "Read(/Users/chriskohout/Library/Preferences/.wrangler/logs/**)",
+      "WebFetch(domain:cloudflare-voicebots.v5bqjpxcbw.workers.dev)"
     ],
     "deny": [],
     "ask": []
