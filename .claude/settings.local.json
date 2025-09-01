@@ -25,7 +25,8 @@
       "WebFetch(domain:www.twilio.com)",
       "WebFetch(domain:developers.cloudflare.com)",
       "Read(/Users/chriskohout/Library/Preferences/.wrangler/logs/**)",
-      "WebFetch(domain:cloudflare-voicebots.v5bqjpxcbw.workers.dev)"
+      "WebFetch(domain:cloudflare-voicebots.v5bqjpxcbw.workers.dev)",
+      "Bash(pkill:*)"
     ],
     "deny": [],
     "ask": []

@@ -18,6 +18,7 @@ export class TwilioVoiceAgent extends VoiceAgent {
   private twilioConnection?: Connection;
   private currentUser?: any; // Store user data in instance memory
   private servicesInitialized = false;
+  private greetingSent = false;
 
   /**
    * Initialize services if not already done
@@ -101,6 +102,9 @@ export class TwilioVoiceAgent extends VoiceAgent {
         Direction: formData.get("Direction") as string,
         AccountSid: formData.get("AccountSid") as string,
       };
+
+      // Reset stream ID for new call to ensure greeting triggers on first media event
+      this.currentStreamSid = undefined;
 
       console.log("WEBHOOK: Incoming Twilio call - single DO approach", {
         ...callData,
@@ -418,6 +422,7 @@ export class TwilioVoiceAgent extends VoiceAgent {
         const data = JSON.parse(message);
         
         // Log the raw message to see what Twilio is actually sending
+        console.log("TWILIO RAW MESSAGE:", JSON.stringify(data, null, 2));
         logger.debug("Twilio WebSocket message received", {
           rawData: JSON.stringify(data).substring(0, 200),
           event: data.event || data.Event,
@@ -439,34 +444,158 @@ export class TwilioVoiceAgent extends VoiceAgent {
           this.currentStreamSid = streamSid;
           logger.info("StreamSid set to", this.currentStreamSid);
           
-          // Send personalized greeting using stored user data
-          console.log("STREAM START: Sending personalized greeting", {
-            streamSid: this.currentStreamSid,
-            hasUserData: !!this.currentUser,
-            userName: this.currentUser ? `${this.currentUser.fName} ${this.currentUser.lName}` : null,
-            doInstanceInfo: {
-              hasCurrentUser: !!this.currentUser,
-              hasCurrentCallSid: !!this.currentCallSid,
-              instanceId: this.ctx.id?.toString().substring(0, 8) || 'unknown'
+          // Send personalized greeting using stored user data (only once)
+          if (!this.greetingSent) {
+            console.log("STREAM START: Sending personalized greeting", {
+              streamSid: this.currentStreamSid,
+              hasUserData: !!this.currentUser,
+              userName: this.currentUser ? `${this.currentUser.fName} ${this.currentUser.lName}` : null,
+              doInstanceInfo: {
+                hasCurrentUser: !!this.currentUser,
+                hasCurrentCallSid: !!this.currentCallSid,
+                instanceId: this.ctx.id?.toString().substring(0, 8) || 'unknown'
+              }
+            });
+            
+            // Ensure TTS is initialized before sending greeting
+            if (!this.tts) {
+              console.log("STREAM START: TTS not initialized, initializing now...");
+              try {
+                await this.onStart();
+              } catch (error) {
+                console.error("STREAM START: Failed to initialize TTS", error);
+              }
             }
+            
+            if (this.tts && this.currentUser) {
+              const greeting = `Hello ${this.currentUser.fName}! I'm Kaylee. How can I help you today?`;
+              logger.info("Sending personalized greeting", { greeting, userName: this.currentUser.fName });
+              await this.tts.sendText(greeting, true);
+              this.greetingSent = true;
+            } else if (this.tts) {
+              const greeting = "Hello! I'm Kaylee. How can I help you today?";
+              logger.info("Sending generic greeting - no user data found", { greeting });
+              await this.tts.sendText(greeting, true);
+              this.greetingSent = true;
+            } else {
+              logger.warn("No TTS service available for greeting - initialization failed");
+            }
+          } else {
+            console.log("STREAM START: Greeting already sent, skipping");
+          }
+          
+          return;
+        }
+
+        if (event === "connected") {
+          logger.info("Twilio stream connected", {
+            streamSid,
+            callSid,
           });
           
-          if (this.tts && this.currentUser) {
-            const greeting = `Hello ${this.currentUser.fName}! I'm Kaylee. How can I help you today?`;
-            logger.info("Sending personalized greeting", { greeting, userName: this.currentUser.fName });
-            await this.tts.sendText(greeting, true);
-          } else if (this.tts) {
-            const greeting = "Hello! I'm Kaylee. How can I help you today?";
-            logger.info("Sending generic greeting - no user data found", { greeting });
-            await this.tts.sendText(greeting, true);
+          // Connected event doesn't have streamSid, but we should initialize services anyway
+          console.log("STREAM CONNECTED: Initializing services", {
+            hasUserData: !!this.currentUser,
+            userName: this.currentUser ? `${this.currentUser.fName} ${this.currentUser.lName}` : null
+          });
+          
+          // Initialize services regardless of streamSid
+          if (!this.tts) {
+            console.log("STREAM CONNECTED: TTS not initialized, initializing now...");
+            try {
+              await this.onStart();
+            } catch (error) {
+              console.error("STREAM CONNECTED: Failed to initialize TTS", error);
+            }
+          }
+          
+          // Send personalized greeting immediately on connected (only if not already sent)
+          if (!this.greetingSent) {
+            if (this.tts && this.currentUser) {
+              const greeting = `Hello ${this.currentUser.fName}! I'm Kaylee. How can I help you today?`;
+              logger.info("Sending personalized greeting on connected", { greeting, userName: this.currentUser.fName });
+              await this.tts.sendText(greeting, true);
+              this.greetingSent = true;
+            } else if (this.tts) {
+              const greeting = "Hello! I'm Kaylee. How can I help you today?";
+              logger.info("Sending generic greeting on connected - no user data found", { greeting });
+              await this.tts.sendText(greeting, true);
+              this.greetingSent = true;
+            } else {
+              logger.warn("No TTS service available for greeting on connected - initialization failed");
+            }
           } else {
-            logger.warn("No TTS service available for greeting");
+            console.log("STREAM CONNECTED: Greeting already sent, skipping");
           }
           
           return;
         }
 
         if (event === "media" && media) {
+          // Debug logging for stream detection
+          console.log("MEDIA EVENT: Stream detection check", {
+            incomingStreamSid: streamSid,
+            currentStreamSid: this.currentStreamSid,
+            willTriggerGreeting: !!(streamSid && streamSid !== this.currentStreamSid),
+            hasUserData: !!this.currentUser,
+            userName: this.currentUser ? `${this.currentUser.fName} ${this.currentUser.lName}` : null
+          });
+          
+          // Initialize services and send greeting if this is a new stream
+          // Check if streamSid is different from current one (new stream)
+          if (streamSid && streamSid !== this.currentStreamSid) {
+            console.log("MEDIA: New stream detected, initializing services and sending greeting", {
+              newStreamSid: streamSid,
+              oldStreamSid: this.currentStreamSid,
+              hasUserData: !!this.currentUser,
+              userName: this.currentUser ? `${this.currentUser.fName} ${this.currentUser.lName}` : null,
+              doInstanceInfo: {
+                hasCurrentUser: !!this.currentUser,
+                hasCurrentCallSid: !!this.currentCallSid,
+                instanceId: this.ctx.id?.toString().substring(0, 8) || 'unknown'
+              }
+            });
+            
+            this.currentStreamSid = streamSid;
+            
+            // Initialize services if not already done
+            if (!this.tts || !this.stt) {
+              console.log("MEDIA: Services not initialized, initializing now...");
+              try {
+                await this.onStart();
+                console.log("MEDIA: Services initialized successfully");
+              } catch (error) {
+                console.error("MEDIA: Failed to initialize services", error);
+              }
+            }
+            
+            // Send personalized greeting
+            if (this.tts && this.currentUser) {
+              const greeting = `Hello ${this.currentUser.fName}! I'm Kaylee. How can I help you today?`;
+              logger.info("Sending personalized greeting", { greeting, userName: this.currentUser.fName });
+              console.log("MEDIA: Sending personalized greeting", { greeting });
+              try {
+                await this.tts.sendText(greeting, true);
+                console.log("MEDIA: Personalized greeting sent successfully");
+              } catch (error) {
+                console.error("MEDIA: Failed to send personalized greeting", error);
+              }
+            } else if (this.tts) {
+              const greeting = "Hello! I'm Kaylee. How can I help you today?";
+              logger.info("Sending generic greeting - no user data found", { greeting });
+              console.log("MEDIA: Sending generic greeting", { greeting });
+              try {
+                await this.tts.sendText(greeting, true);
+                console.log("MEDIA: Generic greeting sent successfully");
+              } catch (error) {
+                console.error("MEDIA: Failed to send generic greeting", error);
+              }
+            } else {
+              logger.warn("No TTS service available for greeting - initialization failed");
+              console.log("MEDIA: No TTS service available for greeting");
+            }
+          }
+          
           // Convert Twilio audio to format expected by STT
           const payload = media.payload || media.Payload;
           if (payload) {
@@ -486,6 +615,17 @@ export class TwilioVoiceAgent extends VoiceAgent {
           logger.info("Twilio stream stopped", { streamSid });
           await this.handleCallEnd(callSid);
           return;
+        }
+
+        // Catch-all for unhandled events
+        if (event) {
+          console.log(`UNHANDLED TWILIO EVENT: ${event}`, {
+            event,
+            streamSid,
+            callSid,
+            hasMedia: !!media,
+            fullData: data
+          });
         }
       } catch (error) {
         logger.error("Error parsing Twilio message", { error, message });
