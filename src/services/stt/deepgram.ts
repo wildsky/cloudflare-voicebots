@@ -17,7 +17,7 @@ export class DeepgramStt extends SpeechToTextService {
   private transcriptionCallbacks: Array<
     (t: { text: string; isFinal: boolean }) => void
   > = [];
-  private shouldReconnect = true;
+  private shouldReconnect = false; // Temporarily disable to see actual errors
 
   /**
    * If you're constructing with an API key:
@@ -30,11 +30,11 @@ export class DeepgramStt extends SpeechToTextService {
   private createSession() {
     this.session = this.deepgram.listen.live({
       model: "nova-3",
-      // language: "en-US",
+      language: "en-US",
       smart_format: true,
-      // encoding: "linear16",
-      // channels: 1,
-      // sample_rate: 16000,
+      encoding: "mulaw",       // Twilio uses μ-law encoding
+      channels: 1,             // Mono audio from Twilio
+      sample_rate: 8000,       // Twilio uses 8kHz
       interim_results: true,
       utterance_end_ms: 1000,
       vad_events: true,
@@ -57,9 +57,15 @@ export class DeepgramStt extends SpeechToTextService {
     // Create the session
     // This call does not immediately open the WS, but sets up config & readiness
     this.session = this.createSession();
+    console.log("🔧 DEEPGRAM SESSION CREATED:", {
+      hasSession: !!this.session,
+      apiKeyLength: this.apiKey?.length || 0,
+      sessionCreated: new Date().toISOString()
+    });
 
     // When the session "opens" (WS connected), we add transcript listeners
     this.session.on(LiveTranscriptionEvents.Open, () => {
+      console.log("🎉 DEEPGRAM SESSION OPENED SUCCESSFULLY!");
       logger.debug("Deepgram session opened. Listening for audio data...");
       // For each transcript event from Deepgram
       this.session?.on(LiveTranscriptionEvents.Transcript, (data) => {
@@ -85,9 +91,16 @@ export class DeepgramStt extends SpeechToTextService {
     });
 
     this.session.on(LiveTranscriptionEvents.Error, (error) => {
+      console.log("💥 DEEPGRAM SESSION ERROR:", error);
       logger.error("Deepgram session error:", error);
     });
-    this.session.on(LiveTranscriptionEvents.Close, () => {
+    this.session.on(LiveTranscriptionEvents.Close, (closeEvent) => {
+      console.log("💔 DEEPGRAM SESSION CLOSED:", {
+        code: closeEvent?.code,
+        reason: closeEvent?.reason,
+        wasClean: closeEvent?.wasClean,
+        timestamp: new Date().toISOString()
+      });
       logger.debug("Deepgram session closed");
       if (this.shouldReconnect) {
         logger.debug("Reconnecting to Deepgram...");

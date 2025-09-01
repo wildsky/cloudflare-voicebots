@@ -26,7 +26,9 @@
       "WebFetch(domain:developers.cloudflare.com)",
       "Read(/Users/chriskohout/Library/Preferences/.wrangler/logs/**)",
       "WebFetch(domain:cloudflare-voicebots.v5bqjpxcbw.workers.dev)",
-      "Bash(pkill:*)"
+      "Bash(pkill:*)",
+      "Bash(node:*)",
+      "WebFetch(domain:developers.deepgram.com)"
     ],
     "deny": [],
     "ask": []

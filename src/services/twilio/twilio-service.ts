@@ -82,7 +82,7 @@ export class TwilioService {
    */
   processIncomingAudio(mediaPayload: string): ArrayBuffer {
     // Twilio sends audio as base64-encoded μ-law (G.711 μ-law)
-    // We need to decode it to raw audio data
+    // Send raw μ-law data to Deepgram as it supports this format directly
     try {
       const audioData = atob(mediaPayload);
       const buffer = new ArrayBuffer(audioData.length);

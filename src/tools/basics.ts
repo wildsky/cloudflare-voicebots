@@ -15,14 +15,17 @@ import {
 } from "./database";
 
 /**
- * Weather information tool that requires human confirmation
- * When invoked, this will present a confirmation dialog to the user
- * The actual implementation is in the executions object below
+ * Weather information tool that executes automatically for voice agents
+ * Since voice calls can't show confirmation dialogs, this runs immediately
  */
 const getWeatherInformation = tool({
   description: "show the weather in a given city to the user",
   parameters: z.object({ city: z.string() }),
-  // Omitting execute function makes this tool require human confirmation
+  execute: async ({ city }) => {
+    console.log(`Getting weather information for ${city}`);
+    // In production, this would call a real weather API
+    return `The weather in ${city} is currently 65 degrees and partly cloudy with a chance of rain later this evening`;
+  },
 });
 
 /**

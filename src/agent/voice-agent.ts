@@ -147,6 +147,10 @@ export class VoiceAgent extends AIChatAgent<Env> {
 
   async onNewGeneratedChunk(event: { chunk: TextStreamPart<any> }) {
     const { chunk } = event;
+    
+    // Debug log all chunk types
+    console.log("CHUNK TYPE:", chunk.type, chunk);
+    
     if (chunk.type == "text-delta") {
       // Accumulate text in buffer
       this.textBuffer += chunk.textDelta;
@@ -162,6 +166,17 @@ export class VoiceAgent extends AIChatAgent<Env> {
         });
         this.tts?.sendText(this.textBuffer.trim(), true);
         this.textBuffer = ""; // Clear buffer
+      }
+    } else if (chunk.type == "tool-call") {
+      console.log("TOOL CALL CHUNK:", chunk.toolName, chunk.args);
+    } else if (chunk.type == "tool-result") {
+      console.log("TOOL RESULT CHUNK:", chunk.result);
+      // Tool results should be spoken too
+      if (typeof chunk.result === 'string') {
+        logger.debug("Sending tool result to TTS service", {
+          text: chunk.result,
+        });
+        this.tts?.sendText(chunk.result, true);
       }
     } else if (chunk.type == "finish") {
       // Send any remaining text
@@ -223,14 +238,19 @@ export class VoiceAgent extends AIChatAgent<Env> {
           const result = streamText({
             model: openai("gpt-4o-2024-11-20"),
             system: `
-                            You are a helpful assistant that can do various tasks. If the user asks,
-                            you can schedule tasks to be executed later. The input may include a date/time/cron pattern
-                            to be passed to a scheduling tool. The time is now: ${new Date().toISOString()}.
+                            You are Kaylee, a helpful voice assistant that can do various tasks. 
+                            When the user asks about weather, use the getWeatherInformation tool.
+                            You can also schedule tasks to be executed later. 
+                            The current time is: ${new Date().toISOString()}.
+                            Remember to speak naturally and conversationally since this is a voice call.
                             `,
             messages: processedMessages,
             tools,
             onFinish,
             onChunk: this.onNewGeneratedChunk.bind(this),
+            onToolCall: async ({ toolCall }) => {
+              console.log("TOOL CALL:", toolCall.toolName, toolCall.args);
+            },
             maxSteps: 10,
             abortSignal: this.currentAbortController.signal, // <-- important
           });

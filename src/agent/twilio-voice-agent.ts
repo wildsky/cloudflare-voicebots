@@ -249,6 +249,9 @@ export class TwilioVoiceAgent extends VoiceAgent {
     // Accept the WebSocket in the Durable Object context
     this.ctx.acceptWebSocket(server);
     
+    // Add debug logging for WebSocket lifecycle
+    console.log("WEBSOCKET: Accepting server WebSocket in Durable Object");
+    
     // Return the client to Twilio
     return new Response(null, {
       status: 101,
@@ -453,6 +456,29 @@ export class TwilioVoiceAgent extends VoiceAgent {
           this.currentStreamSid = streamSid;
           logger.info("StreamSid set to", this.currentStreamSid);
           
+          // Reset greeting flag for new stream
+          this.greetingSent = false;
+          
+          // Ensure services are initialized for new stream
+          console.log("STREAM START: Ensuring services are initialized for new stream");
+          if (!this.tts || !this.stt) {
+            console.log("STREAM START: Services missing, initializing...", {
+              hasTTS: !!this.tts,
+              hasSTT: !!this.stt
+            });
+            try {
+              await this.onStart();
+              console.log("STREAM START: Services initialized successfully");
+            } catch (error) {
+              console.error("STREAM START: Failed to initialize services", error);
+            }
+          } else {
+            console.log("STREAM START: Services already exist", {
+              hasTTS: !!this.tts,
+              hasSTT: !!this.stt
+            });
+          }
+          
           // Send personalized greeting using stored user data
           if (!this.greetingSent) {
             console.log("STREAM START: Sending personalized greeting", {
@@ -525,13 +551,17 @@ export class TwilioVoiceAgent extends VoiceAgent {
         }
 
         if (event === "media" && media) {
-          // Debug logging for stream detection
-          console.log("MEDIA EVENT: Stream detection check", {
+          // Debug logging for stream detection and audio payload analysis
+          const payload = media.payload || media.Payload;
+          console.log("MEDIA EVENT: Stream detection and audio analysis", {
             incomingStreamSid: streamSid,
             currentStreamSid: this.currentStreamSid,
             willTriggerGreeting: !!(streamSid && streamSid !== this.currentStreamSid),
             hasUserData: !!this.currentUser,
-            userName: this.currentUser ? `${this.currentUser.fName} ${this.currentUser.lName}` : null
+            userName: this.currentUser ? `${this.currentUser.fName} ${this.currentUser.lName}` : null,
+            hasPayload: !!payload,
+            payloadLength: payload ? payload.length : 0,
+            samplePayload: payload ? payload.substring(0, 20) + '...' : 'none'
           });
           
           // Initialize services and send greeting if this is a new stream
@@ -589,17 +619,38 @@ export class TwilioVoiceAgent extends VoiceAgent {
             }
           }
           
-          // Convert Twilio audio to format expected by STT
-          const payload = media.payload || media.Payload;
+          // Convert Twilio audio to format expected by STT  
           if (payload) {
+            console.log("AUDIO PROCESSING: Converting Twilio audio for STT", {
+              payloadLength: payload.length,
+              hasSTT: !!this.stt,
+              sttConnected: this.stt ? 'checking...' : 'no STT service'
+            });
+            
             const audioBuffer = this.twilioService.processIncomingAudio(
               payload
             ) as ArrayBuffer;
 
+            console.log("AUDIO PROCESSING: Processed audio buffer", {
+              originalPayloadLength: payload.length,
+              processedBufferSize: audioBuffer.byteLength,
+              bufferType: audioBuffer.constructor.name
+            });
+
             // Send to STT service (existing logic)
             if (this.stt) {
-              await this.stt.sendAudioChunk(audioBuffer);
+              console.log("AUDIO PROCESSING: Sending audio chunk to STT service");
+              try {
+                await this.stt.sendAudioChunk(audioBuffer);
+                console.log("AUDIO PROCESSING: Successfully sent audio chunk to STT");
+              } catch (error) {
+                console.error("AUDIO PROCESSING: Failed to send audio chunk to STT", error);
+              }
+            } else {
+              console.warn("AUDIO PROCESSING: No STT service available to receive audio chunk");
             }
+          } else {
+            console.warn("AUDIO PROCESSING: Media event has no payload - no audio to process");
           }
           return;
         }
@@ -636,11 +687,18 @@ export class TwilioVoiceAgent extends VoiceAgent {
    * Override webSocketMessage to handle null pointer errors from agents framework
    */
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    console.log("🔥 WEBSOCKET MESSAGE HANDLER CALLED!", {
+      hasWebSocket: !!ws,
+      messageType: typeof message,
+      timestamp: new Date().toISOString()
+    });
+    
     try {
       console.log("WEBSOCKET MESSAGE: Received message", {
         wsExists: !!ws,
         messageType: typeof message,
         messageLength: message instanceof ArrayBuffer ? message.byteLength : message.length,
+        messagePreview: typeof message === 'string' ? message.substring(0, 100) : '[binary data]',
         doInstanceInfo: {
           hasCurrentUser: !!this.currentUser,
           hasCurrentCallSid: !!this.currentCallSid,
@@ -736,15 +794,33 @@ export class TwilioVoiceAgent extends VoiceAgent {
     this.currentCallSid = undefined;
     this.currentStreamSid = undefined;
     this.currentCallerId = undefined;
+    
+    // Reset greeting flag so next call will send greeting
+    this.greetingSent = false;
 
-    // Stop TTS and STT services if needed
+    // Force cleanup of services to ensure fresh initialization on next call
+    console.log("CALL END: Cleaning up services for fresh reinitialization");
     if (this.tts) {
-      // await this.tts.disconnect();
+      console.log("CALL END: Disconnecting TTS service");
+      try {
+        // Force disconnect to ensure clean state
+        this.tts = null;
+      } catch (error) {
+        console.error("CALL END: Error disconnecting TTS", error);
+      }
     }
 
     if (this.stt) {
-      // await this.stt.disconnect();
+      console.log("CALL END: Disconnecting STT service");
+      try {
+        // Force disconnect to ensure clean state  
+        this.stt = null;
+      } catch (error) {
+        console.error("CALL END: Error disconnecting STT", error);
+      }
     }
+    
+    console.log("CALL END: Services cleanup complete");
   }
 
   /**
