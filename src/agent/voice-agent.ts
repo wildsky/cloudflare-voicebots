@@ -107,10 +107,6 @@ export class VoiceAgent extends AIChatAgent<Env> {
         );
       }
     });
-
-    logger.debug("Connecting to TTS service");
-    await this.tts.connect();
-    logger.debug("TTS service connected");
   }
 
   async onConnect(connection: Connection, ctx: ConnectionContext) {

@@ -71,24 +71,50 @@ export class ElevenLabsTTS extends TextToSpeechService {
       };
 
       this.ws.onmessage = (event) => {
+        console.log("ELEVENLABS: Received WebSocket message", {
+          dataType: typeof event.data,
+          dataLength: event.data?.length || event.data?.byteLength,
+          isString: typeof event.data === "string",
+          isArrayBuffer: event.data instanceof ArrayBuffer,
+          callbackCount: this.audioCallbacks.size
+        });
+        
         const data = event.data;
         let audio: string;
         if (typeof data === "string") {
           try {
             const parsedData = JSON.parse(data);
+            console.log("ELEVENLABS: Parsed string message", {
+              hasAudio: !!parsedData.audio,
+              audioLength: parsedData.audio?.length,
+              messageKeys: Object.keys(parsedData),
+              fullMessage: parsedData
+            });
             audio = parsedData.audio;
           } catch (e) {
-            logger.error("Error parsing message:", e);
+            logger.error("ELEVENLABS: Error parsing message:", e);
+            console.log("ELEVENLABS: Raw unparseable message:", data);
             return;
           }
         } else if (data instanceof ArrayBuffer) {
           // Handle binary data
+          console.log("ELEVENLABS: Received binary data", {
+            byteLength: data.byteLength
+          });
           audio = Buffer.from(data).toString("base64");
         } else {
-          logger.error("Unknown data type:", typeof data);
+          logger.error("ELEVENLABS: Unknown data type:", typeof data);
+          console.log("ELEVENLABS: Unknown data value:", data);
           return;
         }
-        if (audio) {
+        
+        if (audio && audio.length > 0) {
+          console.log("ELEVENLABS: Processing audio data", {
+            base64Length: audio.length,
+            callbackCount: this.audioCallbacks.size,
+            willProcessCallbacks: this.audioCallbacks.size > 0
+          });
+          
           const audioBuffer = Buffer.from(audio, "base64");
           
           // Convert PCM to μ-law for Twilio compatibility
@@ -96,9 +122,26 @@ export class ElevenLabsTTS extends TextToSpeechService {
           const downsampledPcm = this.downsample16to8(pcmBytes);
           const mulawBytes = this.convertLinear16ToMulaw(downsampledPcm);
           
+          console.log("ELEVENLABS: Calling audio callbacks", {
+            callbackCount: this.audioCallbacks.size,
+            originalSize: audioBuffer.length,
+            downsampledSize: downsampledPcm.length,
+            mulawSize: mulawBytes.length
+          });
+          
           for (const callback of this.audioCallbacks) {
-            callback(mulawBytes.buffer);
+            try {
+              callback(mulawBytes.buffer);
+              console.log("ELEVENLABS: Audio callback executed successfully");
+            } catch (error) {
+              console.error("ELEVENLABS: Error in audio callback:", error);
+            }
           }
+        } else {
+          console.log("ELEVENLABS: No audio data in message or audio is empty", {
+            hasAudio: !!audio,
+            audioLength: audio?.length
+          });
         }
       };
 
@@ -149,7 +192,37 @@ export class ElevenLabsTTS extends TextToSpeechService {
   }
 
   async sendText(text: string, flush: boolean = false): Promise<void> {
+    console.log("ELEVENLABS: sendText called", {
+      text,
+      flush,
+      isConnected: this.isConnected,
+      hasWebSocket: !!this.ws,
+      textLength: text?.length
+    });
+    
+    // Wait for connection if not yet connected but WebSocket exists
+    if (!this.isConnected && this.ws) {
+      console.log("ELEVENLABS: WebSocket exists but not connected, waiting for connection...");
+      
+      // Wait up to 3 seconds for connection
+      const maxWaitTime = 3000;
+      const startTime = Date.now();
+      
+      while (!this.isConnected && (Date.now() - startTime < maxWaitTime)) {
+        await new Promise(resolve => setTimeout(resolve, 100)); // Wait 100ms
+      }
+      
+      console.log("ELEVENLABS: Connection wait finished", {
+        isConnected: this.isConnected,
+        waitTime: Date.now() - startTime
+      });
+    }
+    
     if (!this.isConnected || !this.ws) {
+      console.error("ELEVENLABS: WebSocket not connected after waiting", {
+        isConnected: this.isConnected,
+        hasWebSocket: !!this.ws
+      });
       throw new Error("WebSocket not connected");
     }
 
@@ -159,10 +232,13 @@ export class ElevenLabsTTS extends TextToSpeechService {
         text: text,
         flush: true,
       };
-      logger.info("Sending message:", message);
+      console.log("ELEVENLABS: Sending flush message:", message);
+      logger.info("ELEVENLABS: Sending message:", message);
       this.ws.send(JSON.stringify(message));
     } else {
-      this.ws.send(JSON.stringify({ text }));
+      const message = { text };
+      console.log("ELEVENLABS: Sending non-flush message:", message);
+      this.ws.send(JSON.stringify(message));
     }
   }
 
