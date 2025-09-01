@@ -80,9 +80,18 @@ export class TwilioVoiceAgent extends VoiceAgent {
     // Override TTS audio callback for Twilio support
     if (this.tts) {
       this.tts.onAudio((audioChunk) => {
+        console.log("TTS AUDIO: Received audio chunk for Twilio", {
+          hasStreamSid: !!this.currentStreamSid,
+          streamSid: this.currentStreamSid,
+          chunkSize: audioChunk?.byteLength || audioChunk?.length || 'unknown',
+          webSocketCount: this.ctx.getWebSockets().length
+        });
+        
         if (this.currentStreamSid) {
           // Send to Twilio via WebSocket
           this.sendAudioToTwilio(audioChunk);
+        } else {
+          console.warn("TTS AUDIO: No streamSid available, cannot send audio to Twilio");
         }
       });
     }
@@ -444,7 +453,7 @@ export class TwilioVoiceAgent extends VoiceAgent {
           this.currentStreamSid = streamSid;
           logger.info("StreamSid set to", this.currentStreamSid);
           
-          // Send personalized greeting using stored user data (only once)
+          // Send personalized greeting using stored user data
           if (!this.greetingSent) {
             console.log("STREAM START: Sending personalized greeting", {
               streamSid: this.currentStreamSid,
@@ -509,24 +518,8 @@ export class TwilioVoiceAgent extends VoiceAgent {
             }
           }
           
-          // Send personalized greeting immediately on connected (only if not already sent)
-          if (!this.greetingSent) {
-            if (this.tts && this.currentUser) {
-              const greeting = `Hello ${this.currentUser.fName}! I'm Kaylee. How can I help you today?`;
-              logger.info("Sending personalized greeting on connected", { greeting, userName: this.currentUser.fName });
-              await this.tts.sendText(greeting, true);
-              this.greetingSent = true;
-            } else if (this.tts) {
-              const greeting = "Hello! I'm Kaylee. How can I help you today?";
-              logger.info("Sending generic greeting on connected - no user data found", { greeting });
-              await this.tts.sendText(greeting, true);
-              this.greetingSent = true;
-            } else {
-              logger.warn("No TTS service available for greeting on connected - initialization failed");
-            }
-          } else {
-            console.log("STREAM CONNECTED: Greeting already sent, skipping");
-          }
+          // Connected event just initializes services - greeting is handled by "start" event
+          console.log("STREAM CONNECTED: Services initialized, greeting will be handled by start event");
           
           return;
         }
@@ -711,6 +704,13 @@ export class TwilioVoiceAgent extends VoiceAgent {
 
         // Send via Durable Object WebSocket to Twilio
         const webSockets = this.ctx.getWebSockets();
+        console.log("SEND AUDIO: Sending audio to Twilio WebSocket", {
+          streamSid: this.currentStreamSid,
+          webSocketCount: webSockets.length,
+          payloadLength: twilioPayload.length,
+          messageSize: JSON.stringify(mediaMessage).length
+        });
+        
         webSockets.forEach(ws => {
           ws.send(JSON.stringify(mediaMessage));
         });
