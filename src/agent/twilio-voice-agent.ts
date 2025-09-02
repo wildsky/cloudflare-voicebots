@@ -18,7 +18,6 @@ export class TwilioVoiceAgent extends VoiceAgent {
   private twilioConnection?: Connection;
   private currentUser?: any; // Store user data in instance memory
   private servicesInitialized = false;
-  private greetingSent = false;
 
   /**
    * Initialize services if not already done
@@ -147,7 +146,6 @@ export class TwilioVoiceAgent extends VoiceAgent {
 
       // Reset stream ID for new call to ensure greeting triggers on first media event
       this.currentStreamSid = undefined;
-      this.greetingSent = false;
       
       // Close any existing AssemblyAI connections to prevent "too many sessions" error
       if (this.stt) {
@@ -545,8 +543,6 @@ export class TwilioVoiceAgent extends VoiceAgent {
           this.currentStreamSid = streamSid;
           logger.info("StreamSid set to", this.currentStreamSid);
           
-          // Reset greeting flag for new stream
-          this.greetingSent = false;
           
           console.log("STREAM START: Services should already be initialized", {
             hasSTT: !!this.stt,
@@ -555,7 +551,7 @@ export class TwilioVoiceAgent extends VoiceAgent {
           });
           
           // Send personalized greeting using stored user data
-          if (!this.greetingSent) {
+          if (true) {
             console.log("STREAM START: Sending personalized greeting", {
               streamSid: this.currentStreamSid,
               hasUserData: !!this.currentUser,
@@ -581,17 +577,13 @@ export class TwilioVoiceAgent extends VoiceAgent {
               const greeting = `Hello ${this.currentUser.fName}! I'm Kaylee. How can I help you today?`;
               logger.info("Sending personalized greeting", { greeting, userName: this.currentUser.fName });
               await this.tts.sendText(greeting, true);
-              this.greetingSent = true;
             } else if (this.tts) {
               const greeting = "Hello! I'm Kaylee. How can I help you today?";
               logger.info("Sending generic greeting - no user data found", { greeting });
               await this.tts.sendText(greeting, true);
-              this.greetingSent = true;
             } else {
               logger.warn("No TTS service available for greeting - initialization failed");
             }
-          } else {
-            console.log("STREAM START: Greeting already sent, skipping");
           }
           
           return;
@@ -636,14 +628,12 @@ export class TwilioVoiceAgent extends VoiceAgent {
             currentStreamSid: this.currentStreamSid,
             areEqual: streamSid === this.currentStreamSid,
             hasServices: !!(this.tts && this.stt),
-            greetingSent: this.greetingSent
           });
           
-          // Initialize services if: new stream OR services are missing OR greeting not sent
+          // Initialize services if: new stream OR services are missing
           const needsInitialization = streamSid && (
             streamSid !== this.currentStreamSid ||  // New stream
-            !this.tts || !this.stt ||               // Services missing
-            !this.greetingSent                      // Greeting not sent yet
+            !this.tts || !this.stt                  // Services missing
           );
           
           if (needsInitialization) {
@@ -660,8 +650,6 @@ export class TwilioVoiceAgent extends VoiceAgent {
             });
             
             this.currentStreamSid = streamSid;
-            // Set greeting flag immediately to prevent loops
-            this.greetingSent = true;
             
             // Initialize services if not already done
             if (!this.tts || !this.stt) {
@@ -877,8 +865,6 @@ export class TwilioVoiceAgent extends VoiceAgent {
     this.currentStreamSid = undefined;
     this.currentCallerId = undefined;
     
-    // Reset greeting flag so next call will send greeting
-    this.greetingSent = false;
 
     // Force cleanup of services to ensure fresh initialization on next call
     console.log("CALL END: Cleaning up services for fresh reinitialization");
