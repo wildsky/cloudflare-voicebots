@@ -147,19 +147,46 @@ export class TwilioVoiceAgent extends VoiceAgent {
 
       // Reset stream ID for new call to ensure greeting triggers on first media event
       this.currentStreamSid = undefined;
+      this.greetingSent = false;
+      
+      // Close any existing AssemblyAI connections to prevent "too many sessions" error
+      if (this.stt) {
+        console.log("WEBHOOK: Closing existing STT connection to prevent session conflicts");
+        try {
+          await this.stt.close();
+        } catch (error) {
+          console.error("WEBHOOK: Error closing existing STT connection:", error);
+        }
+        this.stt = undefined;
+      }
 
       console.log("WEBHOOK: Incoming Twilio call - single DO approach", {
         ...callData,
         doInstanceInfo: {
           hasCurrentUser: !!this.currentUser,
           hasCurrentCallSid: !!this.currentCallSid,
-          instanceId: this.ctx.id?.toString().substring(0, 8) || 'unknown'
+          instanceId: this.ctx.id?.toString().substring(0, 8) || 'unknown',
+          fullInstanceId: this.ctx.id?.toString() || 'unknown',
+          isNewCall: this.currentCallSid !== callData.CallSid,
+          previousCallSid: this.currentCallSid
         }
       });
 
       // Store call information in instance memory
+      console.log("WEBHOOK: Setting CallSid for DO routing", {
+        newCallSid: callData.CallSid,
+        previousCallSid: this.currentCallSid,
+        isNewCall: this.currentCallSid !== callData.CallSid,
+        callSidValid: !!callData.CallSid && callData.CallSid.length > 0
+      });
+      
       this.currentCallSid = callData.CallSid;
       this.currentCallerId = callData.From;
+      
+      // Validate CallSid immediately after setting
+      if (!this.currentCallSid) {
+        throw new Error("CRITICAL: CallSid is missing from Twilio webhook data!");
+      }
 
       // Ensure voice services are initialized for this call
       console.log("WEBHOOK: Ensuring voice services are initialized");
@@ -331,11 +358,16 @@ export class TwilioVoiceAgent extends VoiceAgent {
     });
     
     // Use CallSid as the DO ID to ensure unique instance per call
-    url.pathname = `/agents/twiliovoice/${this.currentCallSid || 'default'}/websocket`;
+    if (!this.currentCallSid) {
+      throw new Error("CRITICAL: No CallSid available for DO routing - this should never happen!");
+    }
+    
+    url.pathname = `/agents/twiliovoice/${this.currentCallSid}/websocket`;
     
     console.log("WEBHOOK: Generated WebSocket URL with CallSid as DO ID", {
       finalUrl: url.toString(),
-      callSidUsed: this.currentCallSid || 'default'
+      callSidUsed: this.currentCallSid,
+      doRoutingMode: "STRICT_CALLSID_ONLY"
     });
     
     return url.toString();
