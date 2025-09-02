@@ -52,6 +52,35 @@ export class TwilioVoiceAgent extends VoiceAgent {
       // Call parent's onStart to initialize STT/TTS services
       await super.onStart();
       
+      // Register TTS callback after parent initialization
+      if (this.tts) {
+        console.log("🎤 TTS: Registering audio callback for Twilio", {
+          hasTTS: !!this.tts,
+          ttsType: this.tts.constructor.name
+        });
+        
+        this.tts.onAudio((audioChunk) => {
+          console.log("🎤 TTS AUDIO: Received audio chunk for Twilio", {
+            hasStreamSid: !!this.currentStreamSid,
+            streamSid: this.currentStreamSid,
+            chunkSize: audioChunk?.byteLength || audioChunk?.length || 'unknown',
+            webSocketCount: this.ctx.getWebSockets().length,
+            chunkType: typeof audioChunk,
+            isArrayBuffer: audioChunk instanceof ArrayBuffer
+          });
+          
+          if (this.currentStreamSid) {
+            // Send to Twilio via WebSocket
+            console.log("🎤 TTS AUDIO: Calling sendAudioToTwilio");
+            this.sendAudioToTwilio(audioChunk);
+          } else {
+            console.warn("🎤 TTS AUDIO: No streamSid available, cannot send audio to Twilio");
+          }
+        });
+      } else {
+        console.error("🎤 TTS: No TTS service available to register callback!");
+      }
+      
       console.log("VOICE SERVICES: Initialization complete", {
         hasSTT: !!this.stt,
         hasTTS: !!this.tts,
@@ -102,32 +131,6 @@ export class TwilioVoiceAgent extends VoiceAgent {
     return super.fetch(request);
   }
 
-  async onStart() {
-    // Initialize services
-    await this.ensureServicesInitialized();
-    
-    // Call parent onStart to initialize STT/TTS services
-    await super.onStart();
-
-    // Override TTS audio callback for Twilio support
-    if (this.tts) {
-      this.tts.onAudio((audioChunk) => {
-        console.log("TTS AUDIO: Received audio chunk for Twilio", {
-          hasStreamSid: !!this.currentStreamSid,
-          streamSid: this.currentStreamSid,
-          chunkSize: audioChunk?.byteLength || audioChunk?.length || 'unknown',
-          webSocketCount: this.ctx.getWebSockets().length
-        });
-        
-        if (this.currentStreamSid) {
-          // Send to Twilio via WebSocket
-          this.sendAudioToTwilio(audioChunk);
-        } else {
-          console.warn("TTS AUDIO: No streamSid available, cannot send audio to Twilio");
-        }
-      });
-    }
-  }
 
   /**
    * Handle Twilio webhook - look up user and store in instance memory
@@ -610,25 +613,11 @@ export class TwilioVoiceAgent extends VoiceAgent {
         if (event === "media" && media) {
           // Debug logging for stream detection and audio payload analysis
           const payload = media.payload || media.Payload;
-          console.log("MEDIA EVENT: Stream detection and audio analysis", {
-            incomingStreamSid: streamSid,
-            currentStreamSid: this.currentStreamSid,
-            willTriggerGreeting: !!(streamSid && streamSid !== this.currentStreamSid),
-            hasUserData: !!this.currentUser,
-            userName: this.currentUser ? `${this.currentUser.fName} ${this.currentUser.lName}` : null,
-            hasPayload: !!payload,
-            payloadLength: payload ? payload.length : 0,
-            samplePayload: payload ? payload.substring(0, 20) + '...' : 'none'
-          });
+          // console.log("MEDIA EVENT: Stream detection and audio analysis");
           
           // Initialize services and send greeting if this is a new stream OR if services are missing
           // Check if streamSid is different from current one (new stream) OR services need initialization
-          console.log("MEDIA: Stream comparison", {
-            incomingStreamSid: streamSid,
-            currentStreamSid: this.currentStreamSid,
-            areEqual: streamSid === this.currentStreamSid,
-            hasServices: !!(this.tts && this.stt),
-          });
+          // console.log("MEDIA: Stream comparison");
           
           // Initialize services if: new stream OR services are missing
           const needsInitialization = streamSid && (
@@ -691,28 +680,20 @@ export class TwilioVoiceAgent extends VoiceAgent {
           
           // Convert Twilio audio to format expected by STT  
           if (payload) {
-            console.log("AUDIO PROCESSING: Converting Twilio audio for STT", {
-              payloadLength: payload.length,
-              hasSTT: !!this.stt,
-              sttConnected: this.stt ? 'checking...' : 'no STT service'
-            });
+            // console.log("AUDIO PROCESSING: Converting Twilio audio for STT");
             
             const audioBuffer = this.twilioService.processIncomingAudio(
               payload
             ) as ArrayBuffer;
 
-            console.log("AUDIO PROCESSING: Processed audio buffer", {
-              originalPayloadLength: payload.length,
-              processedBufferSize: audioBuffer.byteLength,
-              bufferType: audioBuffer.constructor.name
-            });
+            // console.log("AUDIO PROCESSING: Processed audio buffer");
 
             // Send to STT service (existing logic)
             if (this.stt) {
-              console.log("AUDIO PROCESSING: Sending audio chunk to STT service");
+              // console.log("AUDIO PROCESSING: Sending audio chunk to STT service");
               try {
                 await this.stt.sendAudioChunk(audioBuffer);
-                console.log("AUDIO PROCESSING: Successfully sent audio chunk to STT");
+                // console.log("AUDIO PROCESSING: Successfully sent audio chunk to STT");
               } catch (error) {
                 console.error("AUDIO PROCESSING: Failed to send audio chunk to STT", error);
               }
@@ -810,6 +791,12 @@ export class TwilioVoiceAgent extends VoiceAgent {
    * Send audio chunk to Twilio via WebSocket
    */
   private sendAudioToTwilio(audioChunk: ArrayBuffer | Buffer) {
+    console.log("📤 SEND AUDIO: sendAudioToTwilio called", {
+      hasStreamSid: !!this.currentStreamSid,
+      streamSid: this.currentStreamSid,
+      chunkSize: audioChunk?.byteLength || audioChunk?.length || 'unknown'
+    });
+    
     if (this.currentStreamSid) {
       try {
         // Convert audio to Twilio format
