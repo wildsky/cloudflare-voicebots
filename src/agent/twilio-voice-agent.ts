@@ -27,8 +27,41 @@ export class TwilioVoiceAgent extends VoiceAgent {
     if (!this.servicesInitialized) {
       this.twilioService = new TwilioService(this.env);
       this.database = new DatabaseService(this.env.USER_DB);
+      
+      // Initialize voice services (STT/TTS) immediately instead of waiting for events
+      console.log("INIT: Initializing voice services (STT/TTS) in ensureServicesInitialized");
+      await this.initializeVoiceServices();
+      
       this.servicesInitialized = true;
       logger.info("Services initialized in TwilioVoiceAgent");
+    }
+  }
+
+  /**
+   * Initialize voice services (STT/TTS) - extracted for reusability
+   */
+  private async initializeVoiceServices() {
+    console.log("VOICE SERVICES: Starting initialization", {
+      hasSTT: !!this.stt,
+      hasTTS: !!this.tts,
+      hasEnv: !!this.env,
+      hasAssemblyAIKey: !!this.env.ASSEMBLYAI_API_KEY,
+      keyLength: this.env.ASSEMBLYAI_API_KEY?.length || 0
+    });
+
+    try {
+      // Call parent's onStart to initialize STT/TTS services
+      await super.onStart();
+      
+      console.log("VOICE SERVICES: Initialization complete", {
+        hasSTT: !!this.stt,
+        hasTTS: !!this.tts,
+        sttType: this.stt?.constructor?.name,
+        ttsType: this.tts?.constructor?.name
+      });
+    } catch (error) {
+      console.error("VOICE SERVICES: Initialization failed", error);
+      throw error;
     }
   }
 
@@ -49,7 +82,7 @@ export class TwilioVoiceAgent extends VoiceAgent {
     await this.ensureServicesInitialized();
 
     // Handle Twilio webhook (HTTP POST) - check if pathname ends with the expected route
-    if (request.method === 'POST' && url.pathname.endsWith('/twilio/voice')) {
+    if (request.method === 'POST' && (url.pathname.endsWith('/webhook') || url.pathname.endsWith('/twilio/voice'))) {
       console.log("Handling Twilio voice webhook");
       return this.handleWebhook(request);
     }
@@ -60,8 +93,8 @@ export class TwilioVoiceAgent extends VoiceAgent {
       return this.handleStatusWebhook(request);
     }
 
-    // Handle WebSocket upgrade - check for pattern /agents/twiliovoice/twilio/{callSid}/websocket
-    if (request.headers.get('Upgrade') === 'websocket' && url.pathname.includes('/twilio/') && url.pathname.endsWith('/websocket')) {
+    // Handle WebSocket upgrade - check for pattern /agents/twiliovoice/{callSid}/websocket
+    if (request.headers.get('Upgrade') === 'websocket' && url.pathname.endsWith('/websocket')) {
       console.log("Handling WebSocket upgrade");
       return this.handleWebSocket(request);
     }
@@ -128,6 +161,29 @@ export class TwilioVoiceAgent extends VoiceAgent {
       this.currentCallSid = callData.CallSid;
       this.currentCallerId = callData.From;
 
+      // Ensure voice services are initialized for this call
+      console.log("WEBHOOK: Ensuring voice services are initialized");
+      if (!this.stt || !this.tts) {
+        console.log("WEBHOOK: Voice services missing, initializing now", {
+          hasSTT: !!this.stt,
+          hasTTS: !!this.tts
+        });
+        await this.initializeVoiceServices();
+        console.log("WEBHOOK: Voice services initialized", {
+          hasSTT: !!this.stt,
+          hasTTS: !!this.tts,
+          sttType: this.stt?.constructor?.name,
+          ttsType: this.tts?.constructor?.name
+        });
+      } else {
+        console.log("WEBHOOK: Voice services already available", {
+          hasSTT: !!this.stt,
+          hasTTS: !!this.tts,
+          sttType: this.stt?.constructor?.name,
+          ttsType: this.tts?.constructor?.name
+        });
+      }
+
       // Look up user by phone number and store in both instance memory AND DO storage
       const phoneNumber = this.twilioService.extractPhoneNumber(callData.From);
       try {
@@ -186,9 +242,9 @@ export class TwilioVoiceAgent extends VoiceAgent {
    */
   private async handleWebSocket(request: Request): Promise<Response> {
     const url = new URL(request.url);
-    // Extract CallSid from path: /agents/twiliovoice/twilio/{callSid}/websocket
+    // Extract CallSid from path: /agents/twiliovoice/{callSid}/websocket
     const pathParts = url.pathname.split('/');
-    const callSidFromPath = pathParts.length >= 5 ? pathParts[4] : null;
+    const callSidFromPath = pathParts.length >= 4 ? pathParts[3] : null;
     
     // Try to load user data from DO storage if not already in memory
     if (!this.currentUser && callSidFromPath) {
@@ -274,11 +330,12 @@ export class TwilioVoiceAgent extends VoiceAgent {
       baseUrl: url.toString()
     });
     
-    // Use consistent room "twilio" instead of dynamic CallSid to ensure same DO instance
-    url.pathname = `/agents/twiliovoice/twilio/${this.currentCallSid || 'default'}/websocket`;
+    // Use CallSid as the DO ID to ensure unique instance per call
+    url.pathname = `/agents/twiliovoice/${this.currentCallSid || 'default'}/websocket`;
     
-    console.log("WEBHOOK: Generated WebSocket URL with consistent room", {
-      finalUrl: url.toString()
+    console.log("WEBHOOK: Generated WebSocket URL with CallSid as DO ID", {
+      finalUrl: url.toString(),
+      callSidUsed: this.currentCallSid || 'default'
     });
     
     return url.toString();
@@ -459,25 +516,11 @@ export class TwilioVoiceAgent extends VoiceAgent {
           // Reset greeting flag for new stream
           this.greetingSent = false;
           
-          // Ensure services are initialized for new stream
-          console.log("STREAM START: Ensuring services are initialized for new stream");
-          if (!this.tts || !this.stt) {
-            console.log("STREAM START: Services missing, initializing...", {
-              hasTTS: !!this.tts,
-              hasSTT: !!this.stt
-            });
-            try {
-              await this.onStart();
-              console.log("STREAM START: Services initialized successfully");
-            } catch (error) {
-              console.error("STREAM START: Failed to initialize services", error);
-            }
-          } else {
-            console.log("STREAM START: Services already exist", {
-              hasTTS: !!this.tts,
-              hasSTT: !!this.stt
-            });
-          }
+          console.log("STREAM START: Services should already be initialized", {
+            hasSTT: !!this.stt,
+            hasTTS: !!this.tts,
+            servicesInitialized: this.servicesInitialized
+          });
           
           // Send personalized greeting using stored user data
           if (!this.greetingSent) {
@@ -528,24 +571,14 @@ export class TwilioVoiceAgent extends VoiceAgent {
             callSid,
           });
           
-          // Connected event doesn't have streamSid, but we should initialize services anyway
-          console.log("STREAM CONNECTED: Initializing services", {
+          // Connected event doesn't have streamSid, just log for now
+          console.log("STREAM CONNECTED: Connected event received", {
             hasUserData: !!this.currentUser,
             userName: this.currentUser ? `${this.currentUser.fName} ${this.currentUser.lName}` : null
           });
           
-          // Initialize services regardless of streamSid
-          if (!this.tts) {
-            console.log("STREAM CONNECTED: TTS not initialized, initializing now...");
-            try {
-              await this.onStart();
-            } catch (error) {
-              console.error("STREAM CONNECTED: Failed to initialize TTS", error);
-            }
-          }
-          
-          // Connected event just initializes services - greeting is handled by "start" event
-          console.log("STREAM CONNECTED: Services initialized, greeting will be handled by start event");
+          // Don't initialize services here - wait for "start" event to avoid duplicates
+          console.log("STREAM CONNECTED: Waiting for start event to initialize services");
           
           return;
         }
@@ -564,9 +597,24 @@ export class TwilioVoiceAgent extends VoiceAgent {
             samplePayload: payload ? payload.substring(0, 20) + '...' : 'none'
           });
           
-          // Initialize services and send greeting if this is a new stream
-          // Check if streamSid is different from current one (new stream)
-          if (streamSid && streamSid !== this.currentStreamSid) {
+          // Initialize services and send greeting if this is a new stream OR if services are missing
+          // Check if streamSid is different from current one (new stream) OR services need initialization
+          console.log("MEDIA: Stream comparison", {
+            incomingStreamSid: streamSid,
+            currentStreamSid: this.currentStreamSid,
+            areEqual: streamSid === this.currentStreamSid,
+            hasServices: !!(this.tts && this.stt),
+            greetingSent: this.greetingSent
+          });
+          
+          // Initialize services if: new stream OR services are missing OR greeting not sent
+          const needsInitialization = streamSid && (
+            streamSid !== this.currentStreamSid ||  // New stream
+            !this.tts || !this.stt ||               // Services missing
+            !this.greetingSent                      // Greeting not sent yet
+          );
+          
+          if (needsInitialization) {
             console.log("MEDIA: New stream detected, initializing services and sending greeting", {
               newStreamSid: streamSid,
               oldStreamSid: this.currentStreamSid,
@@ -580,6 +628,8 @@ export class TwilioVoiceAgent extends VoiceAgent {
             });
             
             this.currentStreamSid = streamSid;
+            // Set greeting flag immediately to prevent loops
+            this.greetingSent = true;
             
             // Initialize services if not already done
             if (!this.tts || !this.stt) {

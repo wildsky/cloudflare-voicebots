@@ -2,6 +2,7 @@ import { routeAgentRequest } from "agents";
 import type { Env } from "./shared/env";
 import type { Chat } from "./agent/agent";
 import { logger } from "./utils";
+import { handleTwilioVoiceWebhook, handleTwilioStatusWebhook } from "./routes/twilio";
 
 // export type { Env } from "./shared/env";
 export { Chat } from "./agent/agent";
@@ -35,6 +36,15 @@ export default {
       isWebSocket: request.headers.get('Upgrade') === 'websocket',
       isTwilioPath: url.pathname.startsWith('/agents/twiliovoice/')
     });
+
+    // Handle Twilio webhooks explicitly to ensure proper DO routing
+    if (request.method === 'POST' && (url.pathname === '/twilio/voice' || url.pathname === '/agents/twiliovoice/twilio/voice')) {
+      return handleTwilioVoiceWebhook(request, env);
+    }
+    
+    if (request.method === 'POST' && (url.pathname === '/twilio/status' || url.pathname === '/agents/twiliovoice/twilio/status')) {
+      return handleTwilioStatusWebhook(request, env);
+    }
 
     // If routeAgentRequest can't find a matching Agent route, return 404
     return (

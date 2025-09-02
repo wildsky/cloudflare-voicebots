@@ -18,7 +18,7 @@ import { tools, executions } from "../tools";
 import { logger } from "../utils";
 import { log } from "console";
 import type { Connection, ConnectionContext, WSMessage } from "partyserver";
-import { DeepgramStt, type SpeechToTextService } from "@/services/stt";
+import { AssemblyAIStt, type SpeechToTextService } from "@/services/stt";
 import type { TextUIPart } from "@ai-sdk/ui-utils";
 import type { TextToSpeechService } from "@/services/tts/tts";
 import { InworldTTS } from "@/services/tts/inworld-tts";
@@ -63,9 +63,16 @@ export class VoiceAgent extends AIChatAgent<Env> {
     logger.debug("Database tools initialized");
 
     logger.debug("Initializing STT service");
+    
+    console.log("🔍 STT ENV DEBUG:", {
+      hasAssemblyAIKey: !!this.env.ASSEMBLYAI_API_KEY,
+      keyLength: this.env.ASSEMBLYAI_API_KEY?.length || 0,
+      keyPreview: this.env.ASSEMBLYAI_API_KEY?.substring(0, 8) + "..." || "undefined",
+      allEnvKeys: Object.keys(this.env).filter(k => k.includes('API_KEY'))
+    });
 
     // Initialize the STT service
-    this.stt = new DeepgramStt(this.env.DEEPGRAM_API_KEY);
+    this.stt = new AssemblyAIStt(this.env.ASSEMBLYAI_API_KEY);
     this.stt.onTranscription(this.handleTranscript.bind(this));
 
     logger.debug("Connecting to STT service");

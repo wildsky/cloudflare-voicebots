@@ -39,12 +39,12 @@ In your Twilio console, configure your phone number with these webhook URLs:
 
 ### Voice Webhook (Primary)
 
-- URL: `https://your-worker-domain.workers.dev/agents/twiliovoice/twilio/voice`
+- URL: `https://your-worker-domain.workers.dev/twilio/voice`
 - HTTP Method: POST
 
 ### Status Callback URL (Optional)
 
-- URL: `https://your-worker-domain.workers.dev/agents/twiliovoice/twilio/status`
+- URL: `https://your-worker-domain.workers.dev/twilio/status`
 - HTTP Method: POST
 
 ## Step 5: Test the Integration

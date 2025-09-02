@@ -69,20 +69,36 @@ export class DeepgramStt extends SpeechToTextService {
       logger.debug("Deepgram session opened. Listening for audio data...");
       // For each transcript event from Deepgram
       this.session?.on(LiveTranscriptionEvents.Transcript, (data) => {
-        // logger.debug("Received transcript data:", data, data.channel);
+        console.log("🎤 DEEPGRAM TRANSCRIPT EVENT:", {
+          hasData: !!data,
+          dataKeys: data ? Object.keys(data) : [],
+          hasChannel: !!data?.channel,
+          channelKeys: data?.channel ? Object.keys(data.channel) : []
+        });
+        
         /**
          * The "data" you get from Deepgram can contain partial and final transcripts.
          * Typically, final transcripts have something like `is_final === true`.
          */
         if (!data) return;
+        
         // If you want to check data.is_final:
         const isChunkConfident = Boolean(data.is_final);
         const isFinal = Boolean(data.speech_final);
         const text = data.channel?.alternatives?.[0]?.transcript || "";
 
+        console.log("🎤 DEEPGRAM TRANSCRIPT DETAILS:", {
+          isChunkConfident,
+          isFinal,
+          text,
+          textLength: text.length,
+          willFireCallbacks: isChunkConfident || isFinal,
+          callbackCount: this.transcriptionCallbacks.length
+        });
+
         // Fire the STT callbacks so consumers can handle partial or final transcripts
         if (isChunkConfident || isFinal) {
-          // logger.debug("Final text chunk received:", text, isFinal);
+          console.log("🎤 DEEPGRAM FIRING CALLBACKS:", { text, isFinal, callbackCount: this.transcriptionCallbacks.length });
           this.transcriptionCallbacks.forEach((cb) => {
             cb({ text, isFinal });
           });

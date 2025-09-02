@@ -28,7 +28,10 @@
       "WebFetch(domain:cloudflare-voicebots.v5bqjpxcbw.workers.dev)",
       "Bash(pkill:*)",
       "Bash(node:*)",
-      "WebFetch(domain:developers.deepgram.com)"
+      "WebFetch(domain:developers.deepgram.com)",
+      "Bash(npx wrangler:*)",
+      "WebFetch(domain:www.assemblyai.com)",
+      "WebFetch(domain:assemblyai.com)"
     ],
     "deny": [],
     "ask": []
