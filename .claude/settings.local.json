@@ -31,7 +31,9 @@
       "WebFetch(domain:developers.deepgram.com)",
       "Bash(npx wrangler:*)",
       "WebFetch(domain:www.assemblyai.com)",
-      "WebFetch(domain:assemblyai.com)"
+      "WebFetch(domain:assemblyai.com)",
+      "WebFetch(domain:raw.githubusercontent.com)",
+      "Read(/Users/chriskohout/**)"
     ],
     "deny": [],
     "ask": []

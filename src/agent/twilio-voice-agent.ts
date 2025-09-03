@@ -159,6 +159,10 @@ export class TwilioVoiceAgent extends VoiceAgent {
           console.error("WEBHOOK: Error closing existing STT connection:", error);
         }
         this.stt = undefined;
+        
+        // Re-initialize voice services after closing STT
+        console.log("WEBHOOK: Re-initializing voice services after STT cleanup");
+        await this.initializeVoiceServices();
       }
 
       console.log("WEBHOOK: Incoming Twilio call - single DO approach", {
@@ -269,6 +273,9 @@ export class TwilioVoiceAgent extends VoiceAgent {
    * Handle WebSocket upgrade request
    */
   private async handleWebSocket(request: Request): Promise<Response> {
+    // Ensure services are initialized before handling WebSocket
+    await this.ensureServicesInitialized();
+    
     const url = new URL(request.url);
     // Extract CallSid from path: /agents/twiliovoice/{callSid}/websocket
     const pathParts = url.pathname.split('/');
@@ -547,11 +554,19 @@ export class TwilioVoiceAgent extends VoiceAgent {
           logger.info("StreamSid set to", this.currentStreamSid);
           
           
-          console.log("STREAM START: Services should already be initialized", {
+          console.log("STREAM START: Checking services initialization", {
             hasSTT: !!this.stt,
             hasTTS: !!this.tts,
             servicesInitialized: this.servicesInitialized
           });
+          
+          // Always re-initialize services for new streams to ensure proper WebSocket connections
+          console.log("STREAM START: Re-initializing services for new stream");
+          try {
+            await this.initializeVoiceServices();
+          } catch (error) {
+            console.error("STREAM START: Failed to initialize services", error);
+          }
           
           // Send personalized greeting using stored user data
           if (true) {
@@ -565,16 +580,6 @@ export class TwilioVoiceAgent extends VoiceAgent {
                 instanceId: this.ctx.id?.toString().substring(0, 8) || 'unknown'
               }
             });
-            
-            // Ensure TTS is initialized before sending greeting
-            if (!this.tts) {
-              console.log("STREAM START: TTS not initialized, initializing now...");
-              try {
-                await this.onStart();
-              } catch (error) {
-                console.error("STREAM START: Failed to initialize TTS", error);
-              }
-            }
             
             if (this.tts && this.currentUser) {
               const greeting = `Hello ${this.currentUser.fName}! I'm Kaylee. How can I help you today?`;
@@ -613,17 +618,28 @@ export class TwilioVoiceAgent extends VoiceAgent {
         if (event === "media" && media) {
           // Debug logging for stream detection and audio payload analysis
           const payload = media.payload || media.Payload;
-          // console.log("MEDIA EVENT: Stream detection and audio analysis");
           
-          // Initialize services and send greeting if this is a new stream OR if services are missing
-          // Check if streamSid is different from current one (new stream) OR services need initialization
-          // console.log("MEDIA: Stream comparison");
+          console.log("MEDIA EVENT: Processing media event", {
+            streamSid,
+            currentStreamSid: this.currentStreamSid,
+            hasTTS: !!this.tts,
+            hasSTT: !!this.stt,
+            streamSidsMatch: streamSid === this.currentStreamSid,
+            servicesExist: !!(this.tts && this.stt)
+          });
           
           // Initialize services if: new stream OR services are missing
           const needsInitialization = streamSid && (
             streamSid !== this.currentStreamSid ||  // New stream
             !this.tts || !this.stt                  // Services missing
           );
+          
+          console.log("MEDIA EVENT: Initialization check", {
+            needsInitialization,
+            hasStreamSid: !!streamSid,
+            isNewStream: streamSid !== this.currentStreamSid,
+            servicesMissing: !this.tts || !this.stt
+          });
           
           if (needsInitialization) {
             console.log("MEDIA: New stream detected, initializing services and sending greeting", {
@@ -644,7 +660,7 @@ export class TwilioVoiceAgent extends VoiceAgent {
             if (!this.tts || !this.stt) {
               console.log("MEDIA: Services not initialized, initializing now...");
               try {
-                await this.onStart();
+                await this.initializeVoiceServices();
                 console.log("MEDIA: Services initialized successfully");
               } catch (error) {
                 console.error("MEDIA: Failed to initialize services", error);

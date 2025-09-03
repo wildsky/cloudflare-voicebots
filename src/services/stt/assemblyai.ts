@@ -15,6 +15,10 @@ export class AssemblyAIStt extends SpeechToTextService {
   private tokenExpiresAt?: Date;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 3;
+  
+  // Audio buffering - AssemblyAI needs at least 400 bytes before it keeps connection open
+  private readonly MIN_BYTES = 400; // 50ms @ 8kHz μ-law recommended by AssemblyAI
+  private audioBuffer: Uint8Array = new Uint8Array(0);
 
 
   constructor(apiKey: string) {
@@ -111,8 +115,19 @@ export class AssemblyAIStt extends SpeechToTextService {
       throw error;
     }
 
-    // Use the temporary token as a query parameter (Cloudflare Workers compatible)
-    const wsUrl = `wss://streaming.assemblyai.com/v3/ws?sample_rate=8000&token=${tempToken}`;
+    // Use URLSearchParams like the working example
+    const AAI_URL = 'wss://streaming.assemblyai.com/v3/ws';
+    const AAI_QUERY = new URLSearchParams({
+      token: tempToken,
+      encoding: 'pcm_mulaw', // Important for Twilio compatibility
+      sample_rate: '8000',
+      formatted_finals: 'false',
+      format_turns: 'false',
+      end_of_turn_confidence_threshold: '0.85',
+      min_end_of_turn_silence_when_confident: '1200'
+    }).toString();
+    
+    const wsUrl = `${AAI_URL}?${AAI_QUERY}`;
     
     console.log("🔧 ASSEMBLYAI SESSION CREATING:", {
       wsUrl: wsUrl.replace(tempToken, "***TEMP_TOKEN***"),
@@ -267,15 +282,32 @@ export class AssemblyAIStt extends SpeechToTextService {
     }
 
     try {
-      // AssemblyAI expects raw PCM audio data
-      // Convert ArrayBuffer to Buffer and send
-      const buffer = new Uint8Array(chunk);
-      console.log("🎤 ASSEMBLYAI: Sending audio chunk", {
-        bufferSize: buffer.byteLength,
-        wsState: this.ws.readyState
+      // Add incoming chunk to buffer
+      const newChunk = new Uint8Array(chunk);
+      const combined = new Uint8Array(this.audioBuffer.length + newChunk.length);
+      combined.set(this.audioBuffer);
+      combined.set(newChunk, this.audioBuffer.length);
+      this.audioBuffer = combined;
+
+      console.log("🎤 ASSEMBLYAI: Audio buffering", {
+        chunkSize: newChunk.byteLength,
+        bufferSize: this.audioBuffer.byteLength,
+        minBytes: this.MIN_BYTES,
+        readyToSend: this.audioBuffer.byteLength >= this.MIN_BYTES
       });
-      
-      this.ws.send(buffer);
+
+      // Only send when we have accumulated enough bytes
+      if (this.audioBuffer.byteLength >= this.MIN_BYTES) {
+        console.log("🎤 ASSEMBLYAI: Sending buffered audio", {
+          bufferSize: this.audioBuffer.byteLength,
+          wsState: this.ws.readyState
+        });
+        
+        this.ws.send(this.audioBuffer);
+        
+        // Clear the buffer after sending
+        this.audioBuffer = new Uint8Array(0);
+      }
     } catch (error) {
       console.error("💥 ASSEMBLYAI: Error sending audio chunk:", error);
       // Don't reconnect on send errors to avoid infinite loops
@@ -287,6 +319,9 @@ export class AssemblyAIStt extends SpeechToTextService {
    */
   async close(): Promise<void> {
     this.shouldReconnect = false;
+    
+    // Clear audio buffer when closing
+    this.audioBuffer = new Uint8Array(0);
     
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       // Send termination message
