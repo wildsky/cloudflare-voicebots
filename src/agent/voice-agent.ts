@@ -63,12 +63,13 @@ export class VoiceAgent extends AIChatAgent<Env> {
     logger.debug("Database tools initialized");
 
     logger.debug("Initializing STT service");
-    
+
     console.log("🔍 STT ENV DEBUG:", {
       hasAssemblyAIKey: !!this.env.ASSEMBLYAI_API_KEY,
       keyLength: this.env.ASSEMBLYAI_API_KEY?.length || 0,
-      keyPreview: this.env.ASSEMBLYAI_API_KEY?.substring(0, 8) + "..." || "undefined",
-      allEnvKeys: Object.keys(this.env).filter(k => k.includes('API_KEY'))
+      keyPreview:
+        this.env.ASSEMBLYAI_API_KEY?.substring(0, 8) + "..." || "undefined",
+      allEnvKeys: Object.keys(this.env).filter((k) => k.includes("API_KEY")),
     });
 
     // Initialize the STT service
@@ -86,7 +87,7 @@ export class VoiceAgent extends AIChatAgent<Env> {
     //   voiceId: "Elizabeth",
     //   modelId: "inworld-tts-1",
     // });
-    
+
     this.tts = new ElevenLabsTTS({
       apiKey: this.env.ELEVENLABS_API_KEY,
       voiceId: "21m00Tcm4TlvDq8ikWAM", // Rachel - clear female voice
@@ -154,10 +155,10 @@ export class VoiceAgent extends AIChatAgent<Env> {
 
   async onNewGeneratedChunk(event: { chunk: TextStreamPart<any> }) {
     const { chunk } = event;
-    
+
     // Debug log all chunk types
     console.log("CHUNK TYPE:", chunk.type, chunk);
-    
+
     if (chunk.type == "text-delta") {
       // Accumulate text in buffer
       this.textBuffer += chunk.textDelta;
@@ -179,7 +180,7 @@ export class VoiceAgent extends AIChatAgent<Env> {
     } else if (chunk.type == "tool-result") {
       console.log("TOOL RESULT CHUNK:", chunk.result);
       // Tool results should be spoken too
-      if (typeof chunk.result === 'string') {
+      if (typeof chunk.result === "string") {
         logger.debug("Sending tool result to TTS service", {
           text: chunk.result,
         });

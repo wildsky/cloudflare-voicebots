@@ -24,7 +24,7 @@ export class ElevenLabsTTS extends TextToSpeechService {
     this.options = {
       modelId: "eleven_flash_v2_5", // Default to Flash model for lowest latency
       optimizeLatency: 3, // Max optimization for speed
-      outputFormat: 'pcm_16000',
+      outputFormat: "pcm_16000",
       ...options,
     };
   }
@@ -76,9 +76,9 @@ export class ElevenLabsTTS extends TextToSpeechService {
           dataLength: event.data?.length || event.data?.byteLength,
           isString: typeof event.data === "string",
           isArrayBuffer: event.data instanceof ArrayBuffer,
-          callbackCount: this.audioCallbacks.size
+          callbackCount: this.audioCallbacks.size,
         });
-        
+
         const data = event.data;
         let audio: string;
         if (typeof data === "string") {
@@ -88,7 +88,7 @@ export class ElevenLabsTTS extends TextToSpeechService {
               hasAudio: !!parsedData.audio,
               audioLength: parsedData.audio?.length,
               messageKeys: Object.keys(parsedData),
-              fullMessage: parsedData
+              fullMessage: parsedData,
             });
             audio = parsedData.audio;
           } catch (e) {
@@ -99,7 +99,7 @@ export class ElevenLabsTTS extends TextToSpeechService {
         } else if (data instanceof ArrayBuffer) {
           // Handle binary data
           console.log("ELEVENLABS: Received binary data", {
-            byteLength: data.byteLength
+            byteLength: data.byteLength,
           });
           audio = Buffer.from(data).toString("base64");
         } else {
@@ -107,28 +107,28 @@ export class ElevenLabsTTS extends TextToSpeechService {
           console.log("ELEVENLABS: Unknown data value:", data);
           return;
         }
-        
+
         if (audio && audio.length > 0) {
           console.log("ELEVENLABS: Processing audio data", {
             base64Length: audio.length,
             callbackCount: this.audioCallbacks.size,
-            willProcessCallbacks: this.audioCallbacks.size > 0
+            willProcessCallbacks: this.audioCallbacks.size > 0,
           });
-          
+
           const audioBuffer = Buffer.from(audio, "base64");
-          
+
           // Convert PCM to μ-law for Twilio compatibility
           const pcmBytes = new Uint8Array(audioBuffer);
           const downsampledPcm = this.downsample16to8(pcmBytes);
           const mulawBytes = this.convertLinear16ToMulaw(downsampledPcm);
-          
+
           console.log("ELEVENLABS: Calling audio callbacks", {
             callbackCount: this.audioCallbacks.size,
             originalSize: audioBuffer.length,
             downsampledSize: downsampledPcm.length,
-            mulawSize: mulawBytes.length
+            mulawSize: mulawBytes.length,
           });
-          
+
           for (const callback of this.audioCallbacks) {
             try {
               callback(mulawBytes.buffer);
@@ -138,10 +138,13 @@ export class ElevenLabsTTS extends TextToSpeechService {
             }
           }
         } else {
-          console.log("ELEVENLABS: No audio data in message or audio is empty", {
-            hasAudio: !!audio,
-            audioLength: audio?.length
-          });
+          console.log(
+            "ELEVENLABS: No audio data in message or audio is empty",
+            {
+              hasAudio: !!audio,
+              audioLength: audio?.length,
+            }
+          );
         }
       };
 
@@ -197,31 +200,33 @@ export class ElevenLabsTTS extends TextToSpeechService {
       flush,
       isConnected: this.isConnected,
       hasWebSocket: !!this.ws,
-      textLength: text?.length
+      textLength: text?.length,
     });
-    
+
     // Wait for connection if not yet connected but WebSocket exists
     if (!this.isConnected && this.ws) {
-      console.log("ELEVENLABS: WebSocket exists but not connected, waiting for connection...");
-      
+      console.log(
+        "ELEVENLABS: WebSocket exists but not connected, waiting for connection..."
+      );
+
       // Wait up to 3 seconds for connection
       const maxWaitTime = 3000;
       const startTime = Date.now();
-      
-      while (!this.isConnected && (Date.now() - startTime < maxWaitTime)) {
-        await new Promise(resolve => setTimeout(resolve, 100)); // Wait 100ms
+
+      while (!this.isConnected && Date.now() - startTime < maxWaitTime) {
+        await new Promise((resolve) => setTimeout(resolve, 100)); // Wait 100ms
       }
-      
+
       console.log("ELEVENLABS: Connection wait finished", {
         isConnected: this.isConnected,
-        waitTime: Date.now() - startTime
+        waitTime: Date.now() - startTime,
       });
     }
-    
+
     if (!this.isConnected || !this.ws) {
       console.error("ELEVENLABS: WebSocket not connected after waiting", {
         isConnected: this.isConnected,
-        hasWebSocket: !!this.ws
+        hasWebSocket: !!this.ws,
       });
       throw new Error("WebSocket not connected");
     }
@@ -277,12 +282,12 @@ export class ElevenLabsTTS extends TextToSpeechService {
   private downsample16to8(pcmBytes: Uint8Array): Uint8Array {
     const outputSize = pcmBytes.length / 2;
     const downsampled = new Uint8Array(outputSize);
-    
+
     for (let i = 0; i < outputSize; i += 2) {
       downsampled[i] = pcmBytes[i * 2];
       downsampled[i + 1] = pcmBytes[i * 2 + 1];
     }
-    
+
     return downsampled;
   }
 
@@ -292,14 +297,14 @@ export class ElevenLabsTTS extends TextToSpeechService {
   private convertLinear16ToMulaw(pcmBytes: Uint8Array): Uint8Array {
     const samples = pcmBytes.length / 2;
     const mulawBytes = new Uint8Array(samples);
-    
+
     for (let i = 0; i < samples; i++) {
       const sampleLE = (pcmBytes[i * 2 + 1] << 8) | pcmBytes[i * 2];
       let signedSample = sampleLE > 32767 ? sampleLE - 65536 : sampleLE;
       let mulaw = this.linearToMulaw(signedSample);
       mulawBytes[i] = mulaw;
     }
-    
+
     return mulawBytes;
   }
 
@@ -309,24 +314,24 @@ export class ElevenLabsTTS extends TextToSpeechService {
   private linearToMulaw(sample: number): number {
     const BIAS = 0x84;
     const CLIP = 8159;
-    
+
     const sign = (sample >> 8) & 0x80;
     if (sign !== 0) sample = -sample;
-    
+
     if (sample > CLIP) sample = CLIP;
     sample += BIAS;
-    
+
     let exponent = 7;
     for (let exp = 0; exp < 8; exp++) {
-      if (sample <= (0xFF << exp)) {
+      if (sample <= 0xff << exp) {
         exponent = exp;
         break;
       }
     }
-    
-    const mantissa = (sample >> (exponent + 3)) & 0x0F;
+
+    const mantissa = (sample >> (exponent + 3)) & 0x0f;
     const mulaw = ~(sign | (exponent << 4) | mantissa);
-    
-    return mulaw & 0xFF;
+
+    return mulaw & 0xff;
   }
 }

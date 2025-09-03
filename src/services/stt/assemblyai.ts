@@ -15,11 +15,10 @@ export class AssemblyAIStt extends SpeechToTextService {
   private tokenExpiresAt?: Date;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 3;
-  
+
   // Audio buffering - AssemblyAI needs at least 400 bytes before it keeps connection open
   private readonly MIN_BYTES = 400; // 50ms @ 8kHz μ-law recommended by AssemblyAI
   private audioBuffer: Uint8Array = new Uint8Array(0);
-
 
   constructor(apiKey: string) {
     super();
@@ -27,7 +26,7 @@ export class AssemblyAIStt extends SpeechToTextService {
     console.log("🔑 ASSEMBLYAI CONSTRUCTOR:", {
       apiKeyProvided: !!apiKey,
       apiKeyLength: apiKey?.length || 0,
-      apiKeyPreview: apiKey?.substring(0, 8) + "..." || "undefined"
+      apiKeyPreview: apiKey?.substring(0, 8) + "..." || "undefined",
     });
   }
 
@@ -38,11 +37,11 @@ export class AssemblyAIStt extends SpeechToTextService {
     if (!this.currentToken || !this.tokenExpiresAt) {
       return false;
     }
-    
+
     // Check if token expires in less than 30 seconds (preemptive renewal)
     const now = new Date();
     const thirtySecondsFromNow = new Date(now.getTime() + 30000);
-    
+
     return this.tokenExpiresAt > thirtySecondsFromNow;
   }
 
@@ -57,37 +56,42 @@ export class AssemblyAIStt extends SpeechToTextService {
     }
 
     console.log("🔑 ASSEMBLYAI: Generating new temporary token...");
-    
+
     try {
       // Use the v3 Universal Streaming token endpoint
-      const response = await fetch("https://streaming.assemblyai.com/v3/token?expires_in_seconds=600", {
-        method: "GET",
-        headers: {
-          "Authorization": this.apiKey
+      const response = await fetch(
+        "https://streaming.assemblyai.com/v3/token?expires_in_seconds=600",
+        {
+          method: "GET",
+          headers: {
+            Authorization: this.apiKey,
+          },
         }
-      });
+      );
 
       if (!response.ok) {
         const errorText = await response.text();
         console.error("💥 ASSEMBLYAI: Token generation failed:", {
           status: response.status,
           statusText: response.statusText,
-          error: errorText
+          error: errorText,
         });
-        throw new Error(`Failed to generate AssemblyAI token: ${response.status} ${errorText}`);
+        throw new Error(
+          `Failed to generate AssemblyAI token: ${response.status} ${errorText}`
+        );
       }
 
       const data = await response.json();
-      
+
       // Store token and calculate expiry time (9.5 minutes to be safe)
       this.currentToken = data.token;
-      this.tokenExpiresAt = new Date(Date.now() + (9.5 * 60 * 1000));
-      
+      this.tokenExpiresAt = new Date(Date.now() + 9.5 * 60 * 1000);
+
       console.log("✅ ASSEMBLYAI: Temporary token generated successfully", {
         expiresAt: this.tokenExpiresAt.toISOString(),
-        validForMinutes: 9.5
+        validForMinutes: 9.5,
       });
-      
+
       return data.token;
     } catch (error) {
       console.error("💥 ASSEMBLYAI: Error generating temporary token:", error);
@@ -116,28 +120,28 @@ export class AssemblyAIStt extends SpeechToTextService {
     }
 
     // Use URLSearchParams like the working example
-    const AAI_URL = 'wss://streaming.assemblyai.com/v3/ws';
+    const AAI_URL = "wss://streaming.assemblyai.com/v3/ws";
     const AAI_QUERY = new URLSearchParams({
       token: tempToken,
-      encoding: 'pcm_mulaw', // Important for Twilio compatibility
-      sample_rate: '8000',
-      formatted_finals: 'false',
-      format_turns: 'false',
-      end_of_turn_confidence_threshold: '0.85',
-      min_end_of_turn_silence_when_confident: '1200'
+      encoding: "pcm_mulaw", // Important for Twilio compatibility
+      sample_rate: "8000",
+      formatted_finals: "false",
+      format_turns: "false",
+      end_of_turn_confidence_threshold: "0.85",
+      min_end_of_turn_silence_when_confident: "1200",
     }).toString();
-    
+
     const wsUrl = `${AAI_URL}?${AAI_QUERY}`;
-    
+
     console.log("🔧 ASSEMBLYAI SESSION CREATING:", {
       wsUrl: wsUrl.replace(tempToken, "***TEMP_TOKEN***"),
       hasToken: !!tempToken,
-      sessionCreated: new Date().toISOString()
+      sessionCreated: new Date().toISOString(),
     });
 
     // Create WebSocket connection directly
     console.log("🔄 ASSEMBLYAI: Creating direct WebSocket connection...");
-    
+
     try {
       this.ws = new WebSocket(wsUrl);
       console.log("🔄 ASSEMBLYAI: WebSocket object created successfully");
@@ -145,11 +149,11 @@ export class AssemblyAIStt extends SpeechToTextService {
       console.error("💥 ASSEMBLYAI: Failed to create WebSocket:", error);
       throw error;
     }
-    
+
     this.ws.onopen = () => {
       console.log("🎉 ASSEMBLYAI SESSION OPENED SUCCESSFULLY!");
       logger.debug("AssemblyAI session opened. Listening for audio data...");
-      
+
       // Reset reconnection attempts on successful connection
       this.reconnectAttempts = 0;
       this.shouldReconnect = true; // Enable auto-reconnect for future disconnections
@@ -165,33 +169,47 @@ export class AssemblyAIStt extends SpeechToTextService {
         code: event.code,
         reason: event.reason,
         wasClean: event.wasClean,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
       logger.debug("AssemblyAI session closed");
-      
+
       // Handle different close codes
-      const isAuthError = event.code === 1008 || event.reason?.includes("Unauthorized");
-      const isTokenExpired = event.reason?.includes("expired") || event.reason?.includes("invalid");
-      
+      const isAuthError =
+        event.code === 1008 || event.reason?.includes("Unauthorized");
+      const isTokenExpired =
+        event.reason?.includes("expired") || event.reason?.includes("invalid");
+
       if (isAuthError || isTokenExpired) {
-        console.log("🔄 ASSEMBLYAI: Token expired or invalid, clearing for regeneration");
+        console.log(
+          "🔄 ASSEMBLYAI: Token expired or invalid, clearing for regeneration"
+        );
         this.currentToken = undefined;
         this.tokenExpiresAt = undefined;
       }
-      
-      if (this.shouldReconnect && this.reconnectAttempts < this.maxReconnectAttempts) {
+
+      if (
+        this.shouldReconnect &&
+        this.reconnectAttempts < this.maxReconnectAttempts
+      ) {
         this.reconnectAttempts++;
-        const backoffDelay = Math.min(1000 * Math.pow(2, this.reconnectAttempts - 1), 10000);
-        
-        console.log(`🔄 ASSEMBLYAI: Reconnecting (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${backoffDelay}ms...`);
-        
+        const backoffDelay = Math.min(
+          1000 * Math.pow(2, this.reconnectAttempts - 1),
+          10000
+        );
+
+        console.log(
+          `🔄 ASSEMBLYAI: Reconnecting (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts}) in ${backoffDelay}ms...`
+        );
+
         setTimeout(() => {
-          this.connect().catch(error => {
+          this.connect().catch((error) => {
             console.error("💥 ASSEMBLYAI: Reconnection failed:", error);
           });
         }, backoffDelay);
       } else if (this.reconnectAttempts >= this.maxReconnectAttempts) {
-        console.error("💥 ASSEMBLYAI: Max reconnection attempts reached, giving up");
+        console.error(
+          "💥 ASSEMBLYAI: Max reconnection attempts reached, giving up"
+        );
         this.shouldReconnect = false;
       }
     };
@@ -202,13 +220,13 @@ export class AssemblyAIStt extends SpeechToTextService {
         console.log("🎤 ASSEMBLYAI MESSAGE EVENT:", {
           hasData: !!data,
           messageType: data.type,
-          dataKeys: data ? Object.keys(data) : []
+          dataKeys: data ? Object.keys(data) : [],
         });
 
         if (data.type === "Begin") {
           console.log("🎤 ASSEMBLYAI SESSION BEGAN:", {
             sessionId: data.id,
-            expiresAt: data.expires_at
+            expiresAt: data.expires_at,
           });
         } else if (data.type === "Turn") {
           const text = data.transcript || "";
@@ -219,15 +237,15 @@ export class AssemblyAIStt extends SpeechToTextService {
             textLength: text.length,
             isFinal,
             willFireCallbacks: text.length > 0,
-            callbackCount: this.transcriptionCallbacks.length
+            callbackCount: this.transcriptionCallbacks.length,
           });
 
           // Fire callbacks for any non-empty transcription
           if (text.length > 0) {
-            console.log("🎤 ASSEMBLYAI FIRING CALLBACKS:", { 
-              text, 
-              isFinal, 
-              callbackCount: this.transcriptionCallbacks.length 
+            console.log("🎤 ASSEMBLYAI FIRING CALLBACKS:", {
+              text,
+              isFinal,
+              callbackCount: this.transcriptionCallbacks.length,
             });
             this.transcriptionCallbacks.forEach((cb) => {
               cb({ text, isFinal });
@@ -236,7 +254,7 @@ export class AssemblyAIStt extends SpeechToTextService {
         } else if (data.type === "Termination") {
           console.log("🎤 ASSEMBLYAI SESSION TERMINATED:", {
             audioDuration: data.audio_duration_seconds,
-            sessionDuration: data.session_duration_seconds
+            sessionDuration: data.session_duration_seconds,
           });
         }
       } catch (error) {
@@ -269,9 +287,9 @@ export class AssemblyAIStt extends SpeechToTextService {
         CONNECTING: WebSocket.CONNECTING,
         OPEN: WebSocket.OPEN,
         CLOSING: WebSocket.CLOSING,
-        CLOSED: WebSocket.CLOSED
+        CLOSED: WebSocket.CLOSED,
       });
-      
+
       if (this.shouldReconnect) {
         logger.debug("Reconnecting to AssemblyAI...");
         await this.connect();
@@ -284,7 +302,9 @@ export class AssemblyAIStt extends SpeechToTextService {
     try {
       // Add incoming chunk to buffer
       const newChunk = new Uint8Array(chunk);
-      const combined = new Uint8Array(this.audioBuffer.length + newChunk.length);
+      const combined = new Uint8Array(
+        this.audioBuffer.length + newChunk.length
+      );
       combined.set(this.audioBuffer);
       combined.set(newChunk, this.audioBuffer.length);
       this.audioBuffer = combined;
@@ -293,18 +313,18 @@ export class AssemblyAIStt extends SpeechToTextService {
         chunkSize: newChunk.byteLength,
         bufferSize: this.audioBuffer.byteLength,
         minBytes: this.MIN_BYTES,
-        readyToSend: this.audioBuffer.byteLength >= this.MIN_BYTES
+        readyToSend: this.audioBuffer.byteLength >= this.MIN_BYTES,
       });
 
       // Only send when we have accumulated enough bytes
       if (this.audioBuffer.byteLength >= this.MIN_BYTES) {
         console.log("🎤 ASSEMBLYAI: Sending buffered audio", {
           bufferSize: this.audioBuffer.byteLength,
-          wsState: this.ws.readyState
+          wsState: this.ws.readyState,
         });
-        
+
         this.ws.send(this.audioBuffer);
-        
+
         // Clear the buffer after sending
         this.audioBuffer = new Uint8Array(0);
       }
@@ -319,20 +339,23 @@ export class AssemblyAIStt extends SpeechToTextService {
    */
   async close(): Promise<void> {
     this.shouldReconnect = false;
-    
+
     // Clear audio buffer when closing
     this.audioBuffer = new Uint8Array(0);
-    
+
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
       // Send termination message
       try {
         const terminateMessage = { type: "Terminate" };
-        console.log("🔄 ASSEMBLYAI SENDING TERMINATE MESSAGE:", terminateMessage);
+        console.log(
+          "🔄 ASSEMBLYAI SENDING TERMINATE MESSAGE:",
+          terminateMessage
+        );
         this.ws.send(JSON.stringify(terminateMessage));
       } catch (error) {
         console.error("Error sending AssemblyAI terminate message:", error);
       }
-      
+
       this.ws.close();
     }
   }

@@ -2,7 +2,10 @@ import { routeAgentRequest } from "agents";
 import type { Env } from "./shared/env";
 import type { Chat } from "./agent/agent";
 import { logger } from "./utils";
-import { handleTwilioVoiceWebhook, handleTwilioStatusWebhook } from "./routes/twilio";
+import {
+  handleTwilioVoiceWebhook,
+  handleTwilioStatusWebhook,
+} from "./routes/twilio";
 
 // export type { Env } from "./shared/env";
 export { Chat } from "./agent/agent";
@@ -18,7 +21,7 @@ export default {
   async fetch(request: Request, env: Env, ctx: ExecutionContext) {
     // FIRST THING: Log that we got ANY request
     console.log("🚀 WORKER HIT:", request.method, request.url);
-    
+
     logger.debug("Worker fetch event", { request });
     if (!env.OPENAI_API_KEY) {
       console.error(
@@ -28,21 +31,29 @@ export default {
     }
 
     const url = new URL(request.url);
-    
+
     console.log("SERVER: Request received", {
       method: request.method,
       pathname: url.pathname,
       fullUrl: request.url,
-      isWebSocket: request.headers.get('Upgrade') === 'websocket',
-      isTwilioPath: url.pathname.startsWith('/agents/twiliovoice/')
+      isWebSocket: request.headers.get("Upgrade") === "websocket",
+      isTwilioPath: url.pathname.startsWith("/agents/twiliovoice/"),
     });
 
     // Handle Twilio webhooks explicitly to ensure proper DO routing
-    if (request.method === 'POST' && (url.pathname === '/twilio/voice' || url.pathname === '/agents/twiliovoice/twilio/voice')) {
+    if (
+      request.method === "POST" &&
+      (url.pathname === "/twilio/voice" ||
+        url.pathname === "/agents/twiliovoice/twilio/voice")
+    ) {
       return handleTwilioVoiceWebhook(request, env);
     }
-    
-    if (request.method === 'POST' && (url.pathname === '/twilio/status' || url.pathname === '/agents/twiliovoice/twilio/status')) {
+
+    if (
+      request.method === "POST" &&
+      (url.pathname === "/twilio/status" ||
+        url.pathname === "/agents/twiliovoice/twilio/status")
+    ) {
       return handleTwilioStatusWebhook(request, env);
     }
 

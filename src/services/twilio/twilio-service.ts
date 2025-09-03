@@ -35,7 +35,7 @@ export class TwilioService {
     return `<?xml version="1.0" encoding="UTF-8"?>
 <Response>
     <Connect>
-        <Stream url="${websocketUrl}" />
+        <Stream url="${websocketUrl}" track="inbound_track" />
     </Connect>
 </Response>`;
   }

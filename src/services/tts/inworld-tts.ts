@@ -65,7 +65,7 @@ export class InworldTTS extends TextToSpeechService {
           sampleRateHertz: 8000,
         },
       };
-      
+
       logger.debug("Making Inworld TTS request", {
         url: "https://api.inworld.ai/tts/v1alpha/text:synthesize",
         body: requestBody,
@@ -103,7 +103,7 @@ export class InworldTTS extends TextToSpeechService {
 
       try {
         const data = JSON.parse(responseText);
-        
+
         logger.debug("Inworld TTS response data", {
           hasResult: !!data.result,
           hasAudioContent: !!(data.result?.audioContent || data.audioContent),
@@ -119,14 +119,16 @@ export class InworldTTS extends TextToSpeechService {
           for (let i = 0; i < binaryString.length; i++) {
             wavBytes[i] = binaryString.charCodeAt(i);
           }
-          
+
           // Extract μ-law data from WAV file
           const mulawBytes = this.extractMulawFromWav(wavBytes);
           const audioBuffer = mulawBytes.buffer;
 
           logger.debug("Received audio chunk from Inworld TTS", {
             size: audioBuffer.byteLength,
-            firstBytes: Array.from(new Uint8Array(audioBuffer.slice(0, 10))).map(b => b.toString(16).padStart(2, '0')).join(' '),
+            firstBytes: Array.from(new Uint8Array(audioBuffer.slice(0, 10)))
+              .map((b) => b.toString(16).padStart(2, "0"))
+              .join(" "),
             responseFormat: data.audioConfig || "unknown",
             callbackCount: this.callbacks.length,
           });
@@ -163,34 +165,39 @@ export class InworldTTS extends TextToSpeechService {
   private extractMulawFromWav(wavBytes: Uint8Array): Uint8Array {
     // WAV file structure:
     // - RIFF header (12 bytes): "RIFF" + filesize + "WAVE"
-    // - fmt chunk: describes audio format 
+    // - fmt chunk: describes audio format
     // - data chunk: contains the actual audio data
-    
+
     try {
       // Find the "data" chunk
       let dataStart = -1;
       for (let i = 0; i < wavBytes.length - 4; i++) {
-        if (wavBytes[i] === 0x64 && wavBytes[i+1] === 0x61 && 
-            wavBytes[i+2] === 0x74 && wavBytes[i+3] === 0x61) { // "data"
+        if (
+          wavBytes[i] === 0x64 &&
+          wavBytes[i + 1] === 0x61 &&
+          wavBytes[i + 2] === 0x74 &&
+          wavBytes[i + 3] === 0x61
+        ) {
+          // "data"
           dataStart = i + 8; // Skip "data" + 4-byte size
           break;
         }
       }
-      
+
       if (dataStart === -1) {
         logger.error("Could not find data chunk in WAV file");
         return new Uint8Array(0);
       }
-      
+
       // Extract audio data (everything after the data chunk header)
       const audioData = wavBytes.slice(dataStart);
-      
+
       logger.debug("Extracted μ-law from WAV", {
         originalSize: wavBytes.length,
         extractedSize: audioData.length,
-        dataStartIndex: dataStart
+        dataStartIndex: dataStart,
       });
-      
+
       return audioData;
     } catch (error) {
       logger.error("Error extracting μ-law from WAV", error);

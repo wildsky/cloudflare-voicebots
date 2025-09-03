@@ -32,9 +32,9 @@ export class DeepgramStt extends SpeechToTextService {
       model: "nova-3",
       language: "en-US",
       smart_format: true,
-      encoding: "mulaw",       // Twilio uses μ-law encoding
-      channels: 1,             // Mono audio from Twilio
-      sample_rate: 8000,       // Twilio uses 8kHz
+      encoding: "mulaw", // Twilio uses μ-law encoding
+      channels: 1, // Mono audio from Twilio
+      sample_rate: 8000, // Twilio uses 8kHz
       interim_results: true,
       utterance_end_ms: 1000,
       vad_events: true,
@@ -60,7 +60,7 @@ export class DeepgramStt extends SpeechToTextService {
     console.log("🔧 DEEPGRAM SESSION CREATED:", {
       hasSession: !!this.session,
       apiKeyLength: this.apiKey?.length || 0,
-      sessionCreated: new Date().toISOString()
+      sessionCreated: new Date().toISOString(),
     });
 
     // When the session "opens" (WS connected), we add transcript listeners
@@ -73,15 +73,15 @@ export class DeepgramStt extends SpeechToTextService {
           hasData: !!data,
           dataKeys: data ? Object.keys(data) : [],
           hasChannel: !!data?.channel,
-          channelKeys: data?.channel ? Object.keys(data.channel) : []
+          channelKeys: data?.channel ? Object.keys(data.channel) : [],
         });
-        
+
         /**
          * The "data" you get from Deepgram can contain partial and final transcripts.
          * Typically, final transcripts have something like `is_final === true`.
          */
         if (!data) return;
-        
+
         // If you want to check data.is_final:
         const isChunkConfident = Boolean(data.is_final);
         const isFinal = Boolean(data.speech_final);
@@ -93,12 +93,16 @@ export class DeepgramStt extends SpeechToTextService {
           text,
           textLength: text.length,
           willFireCallbacks: isChunkConfident || isFinal,
-          callbackCount: this.transcriptionCallbacks.length
+          callbackCount: this.transcriptionCallbacks.length,
         });
 
         // Fire the STT callbacks so consumers can handle partial or final transcripts
         if (isChunkConfident || isFinal) {
-          console.log("🎤 DEEPGRAM FIRING CALLBACKS:", { text, isFinal, callbackCount: this.transcriptionCallbacks.length });
+          console.log("🎤 DEEPGRAM FIRING CALLBACKS:", {
+            text,
+            isFinal,
+            callbackCount: this.transcriptionCallbacks.length,
+          });
           this.transcriptionCallbacks.forEach((cb) => {
             cb({ text, isFinal });
           });
@@ -115,7 +119,7 @@ export class DeepgramStt extends SpeechToTextService {
         code: closeEvent?.code,
         reason: closeEvent?.reason,
         wasClean: closeEvent?.wasClean,
-        timestamp: new Date().toISOString()
+        timestamp: new Date().toISOString(),
       });
       logger.debug("Deepgram session closed");
       if (this.shouldReconnect) {
