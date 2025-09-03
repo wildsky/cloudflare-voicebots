@@ -8,7 +8,7 @@ import { DatabaseService, type User } from "../services/database";
 import { logger } from "../utils";
 import type { Connection, ConnectionContext, WSMessage } from "partyserver";
 import type { Env } from "../shared/env";
-import { AssemblyAIStt } from "../services/stt";
+import { AssemblyAIStt, DeepgramStt } from "../services/stt";
 import { ElevenLabsTTS } from "../services/tts/elevenlabs";
 
 export class TwilioVoiceAgent extends VoiceAgent {
@@ -603,7 +603,11 @@ export class TwilioVoiceAgent extends VoiceAgent {
 
           // Convert Twilio audio to format expected by STT
           if (payload) {
-            // console.log("AUDIO PROCESSING: Converting Twilio audio for STT");
+            console.log("AUDIO DEBUG:", {
+              payloadLength: payload.length,
+              firstChars: payload.substring(0, 20),
+              isAllSame: payload.split('').every(c => c === payload[0])
+            });
 
             const audioBuffer = this.twilioService.processIncomingAudio(
               payload

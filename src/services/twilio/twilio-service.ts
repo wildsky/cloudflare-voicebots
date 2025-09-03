@@ -82,17 +82,44 @@ export class TwilioService {
    */
   processIncomingAudio(mediaPayload: string): ArrayBuffer {
     // Twilio sends audio as base64-encoded μ-law (G.711 μ-law)
-    // Send raw μ-law data to Deepgram as it supports this format directly
+    // Convert to PCM16 for AssemblyAI
     try {
       const audioData = atob(mediaPayload);
-      const buffer = new ArrayBuffer(audioData.length);
-      const view = new Uint8Array(buffer);
-
+      
+      // Convert μ-law to PCM16
+      const pcm16Buffer = new ArrayBuffer(audioData.length * 2);
+      const pcm16View = new Int16Array(pcm16Buffer);
+      
+      // μ-law decompression table lookup would be ideal, but implementing the algorithm
+      const BIAS = 0x84;
+      const CLIP = 32635;
+      
       for (let i = 0; i < audioData.length; i++) {
-        view[i] = audioData.charCodeAt(i);
+        const mulawByte = audioData.charCodeAt(i);
+        
+        // Flip all bits (μ-law is stored inverted)
+        const ulaw = (~mulawByte) & 0xFF;
+        
+        // Extract sign, exponent, and mantissa
+        const sign = (ulaw & 0x80);
+        const exponent = (ulaw >> 4) & 0x07;
+        const mantissa = ulaw & 0x0F;
+        
+        // Calculate the linear value
+        let sample = (mantissa << 1) + 1;
+        sample += BIAS;
+        sample <<= exponent;
+        sample -= BIAS;
+        
+        // Apply sign and clipping
+        if (sign) sample = -sample;
+        if (sample > CLIP) sample = CLIP;
+        if (sample < -CLIP) sample = -CLIP;
+        
+        pcm16View[i] = sample;
       }
-
-      return buffer;
+      
+      return pcm16Buffer;
     } catch (error) {
       logger.error("Failed to process incoming audio", error);
       throw error;
