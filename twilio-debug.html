@@ -1,0 +1,485 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Twilio + AssemblyAI Audio Transcription Debug</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            line-height: 1.6;
+            color: #333;
+            max-width: 1200px;
+            margin: 0 auto;
+            padding: 20px;
+            background: #f8f9fa;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            padding: 30px;
+            border-radius: 10px;
+            margin-bottom: 30px;
+            text-align: center;
+        }
+        
+        .section {
+            background: white;
+            padding: 25px;
+            margin-bottom: 25px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        
+        .code-block {
+            background: #2d3748;
+            color: #e2e8f0;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+            margin: 15px 0;
+            border-left: 4px solid #4299e1;
+        }
+        
+        .code-block pre {
+            margin: 0;
+            font-family: 'SF Mono', Monaco, 'Cascadia Code', 'Roboto Mono', Consolas, monospace;
+            font-size: 14px;
+            line-height: 1.4;
+        }
+        
+        .issue-box {
+            background: #fed7d7;
+            border: 1px solid #feb2b2;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .solution-box {
+            background: #c6f6d5;
+            border: 1px solid #9ae6b4;
+            border-radius: 8px;
+            padding: 20px;
+            margin: 20px 0;
+        }
+        
+        .log-sample {
+            background: #1a202c;
+            color: #cbd5e0;
+            padding: 15px;
+            border-radius: 6px;
+            font-family: monospace;
+            font-size: 12px;
+            overflow-x: auto;
+            white-space: pre-wrap;
+        }
+        
+        h1, h2, h3 {
+            color: #2d3748;
+        }
+        
+        .tech-stack {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 20px;
+            margin: 20px 0;
+        }
+        
+        .tech-card {
+            background: #edf2f7;
+            padding: 20px;
+            border-radius: 8px;
+            border-left: 4px solid #4299e1;
+        }
+        
+        .highlight {
+            background: #fff3cd;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-weight: 600;
+        }
+        
+        .flow-diagram {
+            background: #f7fafc;
+            padding: 20px;
+            border-radius: 8px;
+            border: 2px dashed #cbd5e0;
+            text-align: center;
+            margin: 20px 0;
+        }
+        
+        .arrow {
+            font-size: 24px;
+            color: #4299e1;
+            margin: 10px;
+        }
+    </style>
+</head>
+<body>
+    <div class="header">
+        <h1>🐛 Twilio + AssemblyAI Audio Debug</h1>
+        <p>Voice chat agent receiving audio but no transcriptions from AssemblyAI</p>
+    </div>
+
+    <div class="section">
+        <h2>🎯 The Problem</h2>
+        <div class="issue-box">
+            <h3>Current Issue</h3>
+            <ul>
+                <li><strong>Audio is being received</strong> from Twilio media stream (WebSocket)</li>
+                <li><strong>μ-law to PCM16 conversion</strong> is implemented and working</li>
+                <li><strong>Audio is being sent</strong> to AssemblyAI successfully</li>
+                <li><strong>No transcriptions</strong> are coming back from AssemblyAI</li>
+                <li><strong>Mostly silence data</strong> in Twilio payloads (all forward slashes)</li>
+            </ul>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🏗️ Architecture Overview</h2>
+        <div class="tech-stack">
+            <div class="tech-card">
+                <h3>🌐 Cloudflare Workers</h3>
+                <p>Serverless runtime hosting the voice agent with Durable Objects for state management</p>
+            </div>
+            <div class="tech-card">
+                <h3>📞 Twilio Voice API</h3>
+                <p>Handles phone calls and streams real-time audio via WebSocket (μ-law encoded)</p>
+            </div>
+            <div class="tech-card">
+                <h3>🎤 AssemblyAI</h3>
+                <p>Speech-to-Text service expecting PCM16 audio format</p>
+            </div>
+            <div class="tech-card">
+                <h3>🗣️ ElevenLabs</h3>
+                <p>Text-to-Speech service for generating voice responses</p>
+            </div>
+        </div>
+        
+        <div class="flow-diagram">
+            <strong>Data Flow</strong><br>
+            📱 Phone Call → 📞 Twilio → 🔄 μ-law to PCM16 → 🎤 AssemblyAI → 🤖 AI Agent → 🗣️ ElevenLabs → 📞 Twilio → 📱 Phone
+            <div class="arrow">↓</div>
+            <em>Audio gets stuck at AssemblyAI transcription step</em>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🎧 Audio Processing Pipeline</h2>
+        <h3>1. Twilio Audio Format</h3>
+        <div class="code-block">
+<pre>{
+  "event": "media",
+  "media": {
+    "payload": "/////////////////////...", // Base64-encoded μ-law audio
+    "track": "inbound",
+    "timestamp": "150"
+  }
+}</pre>
+        </div>
+
+        <h3>2. μ-law to PCM16 Conversion</h3>
+        <div class="code-block">
+<pre>// src/services/twilio/twilio-service.ts
+processIncomingAudio(mediaPayload: string): ArrayBuffer {
+  try {
+    const audioData = atob(mediaPayload);
+    
+    // Convert μ-law to PCM16
+    const pcm16Buffer = new ArrayBuffer(audioData.length * 2);
+    const pcm16View = new Int16Array(pcm16Buffer);
+    
+    const BIAS = 0x84;
+    const CLIP = 32635;
+    
+    for (let i = 0; i < audioData.length; i++) {
+      const mulawByte = audioData.charCodeAt(i);
+      
+      // Flip all bits (μ-law is stored inverted)
+      const ulaw = (~mulawByte) & 0xFF;
+      
+      // Extract sign, exponent, and mantissa
+      const sign = (ulaw & 0x80);
+      const exponent = (ulaw >> 4) & 0x07;
+      const mantissa = ulaw & 0x0F;
+      
+      // Calculate the linear value
+      let sample = (mantissa << 1) + 1;
+      sample += BIAS;
+      sample <<= exponent;
+      sample -= BIAS;
+      
+      // Apply sign and clipping
+      if (sign) sample = -sample;
+      if (sample > CLIP) sample = CLIP;
+      if (sample < -CLIP) sample = -CLIP;
+      
+      pcm16View[i] = sample;
+    }
+    
+    return pcm16Buffer;
+  } catch (error) {
+    logger.error("Failed to process incoming audio", error);
+    throw error;
+  }
+}</pre>
+        </div>
+
+        <h3>3. AssemblyAI Configuration</h3>
+        <div class="code-block">
+<pre>// src/services/stt/assemblyai.ts
+const AAI_QUERY = new URLSearchParams({
+  token: tempToken,
+  encoding: "pcm_s16le", // PCM 16-bit little endian (converted from μ-law)
+  sample_rate: "8000",
+  formatted_finals: "false",
+  format_turns: "false",
+  end_of_turn_confidence_threshold: "0.85",
+  min_end_of_turn_silence_when_confident: "1200",
+}).toString();</pre>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📊 Current Logs Analysis</h2>
+        <h3>What We're Seeing</h3>
+        <div class="log-sample">🎤 ASSEMBLYAI: Audio buffering { chunkSize: 320, bufferSize: 640, minBytes: 400, readyToSend: true }
+🎤 ASSEMBLYAI: Sending buffered audio { bufferSize: 640, wsState: 1 }
+AUDIO DEBUG: { payloadLength: 216, firstChars: '////////////////////', isAllSame: false }</div>
+
+        <h3>Recent Progress</h3>
+        <div class="solution-box">
+            <p><strong>✅ Good News:</strong> In the most recent call, we saw actual audio data instead of pure silence:</p>
+            <div class="log-sample">"payload": "////////////////////////////////////////////////////////////////////////////fv////////////////////////////////////////////////////7////////////////////////////////////////////////////////////////////////////+/////w=="</div>
+            <p>The <span class="highlight">fv</span> and other characters indicate real audio content is being received!</p>
+        </div>
+
+        <h3>What's Missing</h3>
+        <div class="issue-box">
+            <p><strong>❌ No AssemblyAI responses:</strong> We're not seeing any transcription events like:</p>
+            <div class="log-sample">🎤 ASSEMBLYAI MESSAGE EVENT: { messageType: "PartialTranscript", text: "testing" }</div>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🔧 Key Code Files</h2>
+        
+        <h3>1. Main Agent (twilio-voice-agent.ts)</h3>
+        <div class="code-block">
+<pre>// Audio processing in media event handler
+const audioBuffer = this.twilioService.processIncomingAudio(payload) as ArrayBuffer;
+
+// Send to STT service
+if (this.stt) {
+  await this.stt.sendAudio(audioBuffer);
+}</pre>
+        </div>
+
+        <h3>2. AssemblyAI Service Setup</h3>
+        <div class="code-block">
+<pre>// src/services/stt/assemblyai.ts
+async sendAudio(audioBuffer: ArrayBuffer): Promise<void> {
+  if (this.ws && this.ws.readyState === 1) {
+    // Buffer audio to meet minimum chunk size
+    const audioArray = new Uint8Array(audioBuffer);
+    
+    // Add to buffer
+    const newBuffer = new Uint8Array(this.audioBuffer.length + audioArray.length);
+    newBuffer.set(this.audioBuffer);
+    newBuffer.set(audioArray, this.audioBuffer.length);
+    this.audioBuffer = newBuffer;
+    
+    logger.debug('🎤 ASSEMBLYAI: Audio buffering', {
+      chunkSize: audioArray.length,
+      bufferSize: this.audioBuffer.length,
+      minBytes: this.minBufferSize,
+      readyToSend: this.audioBuffer.length >= this.minBufferSize
+    });
+    
+    // Send when we have enough data
+    if (this.audioBuffer.length >= this.minBufferSize) {
+      logger.debug('🎤 ASSEMBLYAI: Sending buffered audio', {
+        bufferSize: this.audioBuffer.length,
+        wsState: this.ws.readyState
+      });
+      
+      this.ws.send(this.audioBuffer);
+      this.audioBuffer = new Uint8Array(0); // Reset buffer
+    }
+  }
+}</pre>
+        </div>
+
+        <h3>3. Twilio TwiML Configuration</h3>
+        <div class="code-block">
+<pre>// src/services/twilio/twilio-service.ts
+generateStreamTwiML(websocketUrl: string): string {
+  return `<?xml version="1.0" encoding="UTF-8"?>
+<Response>
+    <Connect>
+        <Stream url="${websocketUrl}" track="inbound_track" />
+    </Connect>
+</Response>`;
+}</pre>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🤔 Potential Issues & Debugging Steps</h2>
+        
+        <h3>Theory 1: Phone Audio Permissions/Setup</h3>
+        <div class="issue-box">
+            <ul>
+                <li>Phone microphone permissions not granted</li>
+                <li>Phone held too far from mouth</li>
+                <li>Background noise cancellation interfering</li>
+                <li>Carrier-specific audio issues</li>
+            </ul>
+            <strong>Test:</strong> Try calling from a different phone/carrier and speak very loudly directly into microphone.
+        </div>
+
+        <h3>Theory 2: AssemblyAI WebSocket Issues</h3>
+        <div class="issue-box">
+            <ul>
+                <li>AssemblyAI not properly receiving the audio format</li>
+                <li>WebSocket connection issues</li>
+                <li>API token expiration (though logs show successful connection)</li>
+                <li>Sample rate mismatch (8000 Hz vs expected rate)</li>
+            </ul>
+            <strong>Test:</strong> Add more detailed logging for AssemblyAI WebSocket messages.
+        </div>
+
+        <h3>Theory 3: μ-law Decoding Still Incorrect</h3>
+        <div class="issue-box">
+            <ul>
+                <li>Algorithm might still have bugs</li>
+                <li>Endianness issues</li>
+                <li>Sample format expectations</li>
+            </ul>
+            <strong>Test:</strong> Save raw audio data to file and analyze with audio tools.
+        </div>
+
+        <h3>Theory 4: Twilio Stream Configuration</h3>
+        <div class="issue-box">
+            <ul>
+                <li>Track configuration (should be "inbound" not "inbound_track"?)</li>
+                <li>Media format assumptions</li>
+                <li>WebSocket connection timing</li>
+            </ul>
+            <strong>Test:</strong> Try different TwiML stream configurations.
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🧪 Recommended Debug Steps</h2>
+        
+        <h3>Step 1: Enhanced Audio Logging</h3>
+        <div class="code-block">
+<pre>// Add to processIncomingAudio method
+console.log('Raw μ-law bytes (first 20):', 
+  Array.from(audioData.slice(0, 20))
+    .map(b => b.charCodeAt(0).toString(16).padStart(2, '0'))
+    .join(' ')
+);
+
+console.log('Converted PCM16 samples (first 10):', 
+  Array.from(pcm16View.slice(0, 10))
+);
+
+// Check for actual audio vs silence
+const hasVariation = pcm16View.some((sample, i) => 
+  i > 0 && Math.abs(sample - pcm16View[i-1]) > 100
+);
+console.log('Audio has variation:', hasVariation);</pre>
+        </div>
+
+        <h3>Step 2: AssemblyAI Response Monitoring</h3>
+        <div class="code-block">
+<pre>// Enhanced WebSocket message logging in assemblyai.ts
+this.ws.onmessage = (event) => {
+  console.log('🎤 ASSEMBLYAI RAW MESSAGE:', event.data);
+  
+  try {
+    const data = JSON.parse(event.data);
+    console.log('🎤 ASSEMBLYAI PARSED:', {
+      type: data.type,
+      messageType: data.message_type,
+      hasText: !!data.text,
+      confidence: data.confidence,
+      timestamp: new Date().toISOString()
+    });
+  } catch (e) {
+    console.log('🎤 ASSEMBLYAI PARSE ERROR:', e.message);
+  }
+};</pre>
+        </div>
+
+        <h3>Step 3: Audio File Export</h3>
+        <div class="code-block">
+<pre>// Save converted audio for analysis
+const blob = new Blob([pcm16Buffer], { type: 'audio/wav' });
+console.log('Audio blob size:', blob.size);
+// Could implement WAV header and save to file system for analysis</pre>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>📞 Test Instructions</h2>
+        <div class="solution-box">
+            <h3>Current Test Process</h3>
+            <ol>
+                <li>Deploy code: <code>npm run deploy</code></li>
+                <li>Tail logs: <code>npx wrangler tail</code></li>
+                <li>Call the Twilio number</li>
+                <li>Hear greeting: "Hello Chris! I'm Kaylee. How can I help you today?"</li>
+                <li>Say "testing" loudly and clearly</li>
+                <li>Check logs for AssemblyAI transcription responses</li>
+            </ol>
+            
+            <p><strong>Expected:</strong> Should see transcription messages from AssemblyAI</p>
+            <p><strong>Actual:</strong> Only see audio buffering/sending messages, no transcriptions</p>
+        </div>
+    </div>
+
+    <div class="section">
+        <h2>🔗 Relevant Documentation</h2>
+        <ul>
+            <li><a href="https://www.twilio.com/docs/voice/twiml/stream">Twilio Media Streams</a></li>
+            <li><a href="https://www.assemblyai.com/docs/walkthroughs/realtime-streaming-transcription">AssemblyAI Real-time Streaming</a></li>
+            <li><a href="https://en.wikipedia.org/wiki/%CE%9C-law_algorithm">μ-law Audio Compression</a></li>
+            <li><a href="https://developers.cloudflare.com/durable-objects/">Cloudflare Durable Objects</a></li>
+        </ul>
+    </div>
+
+    <div class="section">
+        <h2>💡 Additional Context</h2>
+        <p><strong>System is working:</strong></p>
+        <ul>
+            <li>✅ Twilio WebSocket connection established</li>
+            <li>✅ Media stream receiving audio data</li>
+            <li>✅ μ-law decoding algorithm implemented</li>
+            <li>✅ AssemblyAI WebSocket connection successful</li>
+            <li>✅ Audio buffering and sending to AssemblyAI</li>
+            <li>✅ ElevenLabs TTS working (greeting plays)</li>
+        </ul>
+        
+        <p><strong>Missing piece:</strong></p>
+        <ul>
+            <li>❌ AssemblyAI not returning transcriptions</li>
+            <li>❌ Mostly getting silence/padding data from phone</li>
+        </ul>
+
+        <div class="highlight" style="display: block; padding: 15px; margin: 20px 0;">
+            <strong>Key Question:</strong> Is the issue in audio capture (phone → Twilio), 
+            audio processing (μ-law → PCM16), or transcription service (AssemblyAI setup)?
+        </div>
+    </div>
+
+    <footer style="text-align: center; margin-top: 50px; padding: 20px; color: #666;">
+        <p>Generated on <script>document.write(new Date().toLocaleDateString())</script></p>
+        <p>Cloudflare Workers + Twilio + AssemblyAI Voice Agent Debug</p>
+    </footer>
+</body>
+</html>
