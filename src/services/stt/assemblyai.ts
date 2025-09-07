@@ -123,7 +123,7 @@ export class AssemblyAIStt extends SpeechToTextService {
     const AAI_URL = "wss://streaming.assemblyai.com/v3/ws";
     const AAI_QUERY = new URLSearchParams({
       token: tempToken,
-      encoding: "pcm_s16le", // PCM 16-bit little endian (converted from μ-law)
+      encoding: "pcm_mulaw", // μ-law encoding (direct from Twilio, no conversion needed)
       sample_rate: "8000",
       formatted_finals: "false",
       format_turns: "false",
