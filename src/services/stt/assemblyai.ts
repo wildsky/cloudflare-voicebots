@@ -230,7 +230,7 @@ export class AssemblyAIStt extends SpeechToTextService {
           });
         } else if (data.type === "Turn") {
           const text = data.transcript || "";
-          const isFinal = data.turn_is_formatted || false;
+          const isFinal = data.end_of_turn || data.turn_is_formatted || false;
 
           console.log("🎤 ASSEMBLYAI TRANSCRIPT DETAILS:", {
             text,

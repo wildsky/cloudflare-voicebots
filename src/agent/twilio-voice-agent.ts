@@ -43,7 +43,15 @@ export class TwilioVoiceAgent extends VoiceAgent {
       try {
         console.log("STT: Initializing AssemblyAI service");
         this.stt = new AssemblyAIStt(this.env.ASSEMBLYAI_API_KEY);
-        this.stt.onTranscription(this.handleTranscript.bind(this));
+        
+        // Get the parent class method and bind it to this instance
+        const parentHandleTranscript = VoiceAgent.prototype.handleTranscript;
+        this.stt.onTranscription(async (transcript) => {
+          console.log("STT CALLBACK RECEIVED IN TWILIO AGENT:", transcript);
+          // Call the parent class method with proper context
+          console.log("CALLING PARENT handleTranscript");
+          return await parentHandleTranscript.call(this, transcript);
+        });
         await this.stt.connect();
         this.sttInitialized = true;
         console.log("STT: Service initialized successfully");

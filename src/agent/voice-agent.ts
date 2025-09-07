@@ -125,7 +125,11 @@ export class VoiceAgent extends AIChatAgent<Env> {
   }
 
   async handleTranscript(transcript: { text: string; isFinal: boolean }) {
-    // logger.debug("Received transcript from STT service", { transcript });
+    console.log("VoiceAgent.handleTranscript called:", { 
+      text: transcript.text, 
+      isFinal: transcript.isFinal,
+      accumulatorLength: this.transcriptAccumulator.length 
+    });
 
     if (transcript.text.length > 0) {
       // Craft a message chunk
@@ -135,10 +139,12 @@ export class VoiceAgent extends AIChatAgent<Env> {
       };
 
       this.transcriptAccumulator.push(messageChunk);
+      console.log("Added to accumulator, new length:", this.transcriptAccumulator.length);
     }
 
     // Accumulate the transcript messages if not final
     if (transcript.isFinal && this.transcriptAccumulator.length > 0) {
+      console.log("Processing final transcript with accumulator:", this.transcriptAccumulator);
       // If the transcript is final, save the accumulated messages
       const finalTranscript: Message = {
         id: generateId(),
@@ -150,6 +156,40 @@ export class VoiceAgent extends AIChatAgent<Env> {
       this.transcriptAccumulator = [];
       // Save the message chunk to the conversation logs
       await this.saveMessages([...this.messages, finalTranscript]);
+      
+      console.log("PROCESSING USER MESSAGE:", finalTranscript.content);
+      
+      // Process the message and generate a response
+      try {
+        const response = await this.onChatMessage(async (event) => {
+          console.log("CHAT MESSAGE FINISHED:", event);
+          // Handle the completion of the stream
+          const responseMessage: Message = {
+            id: generateId(),
+            role: "assistant",
+            content: event.text,
+            parts: [], // The parts are accumulated in onNewGeneratedChunk
+            createdAt: new Date(),
+          };
+          await this.saveMessages([...this.messages, responseMessage]);
+        });
+        
+        console.log("CHAT MESSAGE RESPONSE:", response);
+        
+        // The response is a Response object with a streaming body
+        // We need to consume it to trigger the actual processing
+        if (response && response.body) {
+          const reader = response.body.getReader();
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+            // The chunks are being processed by onNewGeneratedChunk
+            console.log("STREAM CHUNK RECEIVED:", value?.length || 0, "bytes");
+          }
+        }
+      } catch (error) {
+        console.error("ERROR PROCESSING CHAT MESSAGE:", error);
+      }
     }
   }
 

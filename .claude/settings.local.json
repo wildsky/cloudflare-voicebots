@@ -33,7 +33,8 @@
       "WebFetch(domain:www.assemblyai.com)",
       "WebFetch(domain:assemblyai.com)",
       "WebFetch(domain:raw.githubusercontent.com)",
-      "Read(/Users/chriskohout/**)"
+      "Read(/Users/chriskohout/**)",
+      "Read(//Users/chriskohout/Library/Preferences/.wrangler/logs/**)"
     ],
     "deny": [],
     "ask": []
